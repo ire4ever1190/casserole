@@ -58,6 +58,10 @@ suite "Unpacking":
                 of Right(_): "right"
     check value == "right"
 
+  test "Raises branch defect for wrong branch":
+    expect FieldDefect:
+      Left(_) ?= Maybe[int, int].Right(1)
+
 suite "Wrapping Option":
   let
     someVal = some("hello")

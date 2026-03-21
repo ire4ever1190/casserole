@@ -122,6 +122,14 @@ proc currentBranch*[D; T: CaseObject[D]](c: T): D =
   ## Returns the current state that a [CaseObject] is in
   c.kind
 
+template branchCheck(obj, branch: untyped) =
+  ## Inserts a branch check that raises a `FieldDefect` when accessing invalid branches.
+  ## Disabled with `-d:danger`
+  when not defined(danger):
+    let currentBranch = obj.currentBranch
+    if currentBranch != branch:
+      raise (ref FieldDefect)(msg: "Trying to access " & $branch & " but object is " & $currentBranch)
+
 macro `?=`*(lhs: untyped, rhs: CaseObject | CasedObject): untyped =
   ## Unpacks a cased object into an expected type.
   ## Raises a field defect if its the wrong type
@@ -131,6 +139,12 @@ macro `?=`*(lhs: untyped, rhs: CaseObject | CasedObject): untyped =
 
   for (ident, idx) in lhs.collectFields:
     result &= newIdentDefs(ident, newEmptyNode(), newBracketExpr(branch, newLit idx))
+
+  # We still need to add a check so field defects are thrown for bad branches
+  result = newStmtList(
+    newCall(bindSym"branchCheck", rhs, lhs[0]),
+    result
+  )
 
 macro `?==`*(lhs: untyped, rhs: CaseObject | CasedObject): bool =
   ## Like [?=] except doesn't raise an error. This is meant
