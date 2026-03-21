@@ -29,12 +29,9 @@ runnableExamples:
   of None():
     echo "There was no value =("
 
-import std/[macros, strutils, tables, sequtils]
+import std/[macros, strutils, sequtils]
 
 {.experimental: "dotOperators".}
-
-
-
 
 type
   CaseObject*[D] = object of RootObj
@@ -173,5 +170,25 @@ macro cased*(inp: untyped): untyped =
     enumDecl,
     nnkTypeDef.newTree(inp[0], inp[1], newObjectDecl)
   )
-  echo result.toStrLit
-  echo result.treeRepr
+
+macro `case`*(n: CaseObject): untyped =
+  ## Macro that adds support for pattern matching via case statement/expression.
+  ## This supports the same syntax as [?==]
+  # Currently just desugars to a series of `?==` calls
+  # Will need to optimise in the future so it checks the tag directly first
+  result = newStmtList()
+
+  # We store the passed in object so it doesn't get reevaulated multiple times
+  let valueIdent = nskLet.genSym"value"
+  result &= newLetStmt(valueIdent, n[0])
+
+  let ifStmt = nnkIfStmt.newTree()
+  for branch in n[1 .. ^1]:
+    case branch.kind
+    of nnkOfBranch:
+      ifStmt &= nnkElifBranch.newTree(newCall(bindSym"?==", branch[0], valueIdent), branch[1])
+    of nnkElse:
+      ifStmt &= branch
+    else:
+      "Unexpected node".error(branch)
+  result &= ifStmt

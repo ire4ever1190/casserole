@@ -36,3 +36,9 @@ suite "Unpacking":
     let default = if Some(value) ?== noValue: value
                   else: "Some default"
     check default == "Some default"
+
+  test "Can unpack via a case statement":
+    let value = case someValue
+                of Some(value): value
+                else: "Nothing"
+    check value == "hello"
