@@ -1,11 +1,44 @@
+## This library supports making sum types without needing a separate enum with like variants.
+## This gives support for having fields with the same name along with safe unpacking of values
+runnableExamples:
+  type
+    # Types have the {.cased.} pragma to generate a sum type
+    Optional*[T] {.cased.} = object
+      # No need for an enum, just declare the branches!
+      case
+      of Some:
+        # Can store multiple fields, in this example we just have the field `value`
+        value: T
+      of None: nil
+
+  # The syntax of Object.Branch(...params) is used to construct the object
+  let some = Optional[string].Some("hello")
+
+  # You can then unpack a value inline (This throws a FieldDefect if you are wrong!)
+  Some(value) ?= some
+  assert value == "hello"
+
+  # You can also safely unpack via if statements/expressions
+  if Some(value) ?== some:
+    echo "Safely got: " & value
+
+  # Or case statements/expressions
+  case some
+  of Some(value):
+    echo "Its " & value
+  of None():
+    echo "There was no value =("
+
 import std/[macros, strutils, tables, sequtils]
 
 {.experimental: "dotOperators".}
 
+
+
+
 type
   CaseObject*[D] = object of RootObj
-
-
+    ## Type class for accepting a case object
 
 proc getTagIdent(tag: string): NimNode =
   ## Returns the identifier for a tag
@@ -28,15 +61,6 @@ macro `?=`*(lhs: untyped, rhs: CaseObject): untyped =
 
   for i in 1 ..< lhs.len:
     result &= newIdentDefs(lhs[i], newEmptyNode(), nnkBracketExpr.newTree(branch, newLit i - 1))
-
-#[
-  block:
-    let rightBranch = idk.kind == Some
-    var foo: typeof(idk.some[0])
-    if rightBranch:
-      foo = idk.some[0]
-    rightBranch
-]#
 
 macro `?==`*(lhs: untyped, rhs: CaseObject): bool =
   ## Like [?=] except doesn't raise an error. This is meant
@@ -92,9 +116,20 @@ block:
 #   for child in children:
 #     parent &= child
 
+proc newBracketExpr(a, b: NimNode): NimNode =
+  ## Helper syntax for making bracket expr
+  return nnkBracketExpr.newTree(a, b)
+
 macro cased*(inp: untyped): untyped =
   ## Generates a case class object based on [RFC#559](https://github.com/nim-lang/RFCs/issues/559)
-  echo inp.treeRepr
+  runnableExamples:
+    type
+      Optional[T] {.cased.} = object
+        case
+        of Some:
+          value: T
+        of None: discard
+
   # Pull some info straight from the object
   let
     name = inp[0].basename.strVal
@@ -124,13 +159,14 @@ macro cased*(inp: untyped): untyped =
     # Add all the branches
     for (tags, fields) in branches:
       let ofBranch = newNimNode(nnkOfBranch).add(tags.mapIt(ident it))
+      # TODO: Support multiple fields
       ofBranch &= nnkRecList.newTree(
         nnkIdentDefs.newTree(getTagIdent tags[0], nnkTupleTy.newTree(fields), newEmptyNode())
       )
       caseStmt &= ofBranch
 
 
-    let objectTy = nnkObjectTy.newTree(newEmptyNode(), nnkOfInherit.newTree(nnkBracketExpr.newTree(bindSym"CaseObject", enumName)), caseStmt)
+    let objectTy = nnkObjectTy.newTree(newEmptyNode(), nnkOfInherit.newTree(newBracketExpr(bindSym"CaseObject", enumName)), caseStmt)
     if isRef: nnkRefTy.newTree(objectTy) else: objectTy
 
   result = nnkTypeSection.newTree(
@@ -139,10 +175,3 @@ macro cased*(inp: untyped): untyped =
   )
   echo result.toStrLit
   echo result.treeRepr
-
-type
-  Optional*[T] {.cased.} = object
-    case
-    of Some:
-      value: T
-    of None: nil

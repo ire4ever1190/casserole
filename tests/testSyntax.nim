@@ -13,7 +13,7 @@ type
   Optional*[T] {.cased.} = object
     case
     of Some:
-      some: T
+      value: T
     of None: discard
 
 
