@@ -36,13 +36,13 @@ runnableExamples:
     echo "Was something"
   of Error(error):
     echo "It failed"
-## I could show you how to make an `Option[T]` type but that would be redundant since this libray supports `std/options`!
+## I could show you how to make an `Option[T]` type but that would be redundant since this library supports `std/options`!
+## This is documented in [optionSupport](casserole/optionSupport.html) and a similar pattern can be follow to support other types
 runnableExamples:
   import std/options
 
   let val = some("Hello")
 
-  # Everything works like in the example before (Branches are still Some/None)
   if Some(value) ?== val:
     echo value
 
@@ -133,6 +133,14 @@ template branchCheck(obj, branch: untyped) =
 macro `?=`*(lhs: untyped, rhs: CaseObject | CasedObject): untyped =
   ## Unpacks a cased object into an expected type.
   ## Raises a field defect if its the wrong type
+  runnableExamples:
+    import std/options
+
+    let opt = some(1)
+    # Inserts `val` into scope
+    Some(val) ?= opt
+    assert val == opt.get()
+
   result = nnkLetSection.newTree()
 
   let branch = getBranch(rhs, ident lhs[0].strVal)
@@ -150,6 +158,15 @@ macro `?==`*(lhs: untyped, rhs: CaseObject | CasedObject): bool =
   ## Like [?=] except doesn't raise an error. This is meant
   ## to be used inside `if` statements for unpacking a value.
   ## Variables will still be added to scope for wrong branch, but won't be initialised
+  runnableExamples:
+    import std/options
+    let opt = none(string)
+
+    # Won't error if wrong branch
+    if Some(value) ?== opt:
+      # `value` can only be accessed inside if statement
+      echo "Great, we have " & $value
+
   let
     branch = getBranch(rhs, ident lhs[0].strVal)
     rightBranch = newCall(ident"==", getCurrentBranch(rhs), lhs[0])
@@ -241,6 +258,13 @@ macro cased*(inp: untyped): untyped =
 macro `case`*(n: CasedObject | CaseObject): untyped =
   ## Macro that adds support for pattern matching via case statement/expression.
   ## This supports the same syntax as [?=]
+  runnableExamples:
+    import std/options
+
+    case some(9)
+    of Some(_): echo "Have something"
+    of None(): echo "Have nothing"
+
   result = newStmtList()
 
   # We store the passed in object so it doesn't get reevaulated multiple times
