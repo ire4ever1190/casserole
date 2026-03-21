@@ -1,5 +1,7 @@
 # Casserole 
 
+[Docs](https://ire4ever1190.github.io/casserole/develop/casserole.html)
+
 Library that adds support for sum types/case objects with pattern matching. 
 Also integrates with `std/options` for easy integration with existing code.
 
