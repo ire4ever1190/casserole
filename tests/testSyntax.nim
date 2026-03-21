@@ -5,10 +5,11 @@
 #
 # To run these tests, simply execute `nimble test`.
 
-import std/[unittest, options, macros]
+import std/[unittest, options, macros, json]
 
 import casserole
 import casserole/nimNodeSupport
+import casserole/jsonNodeSupport
 
 type
   Maybe*[L, R] {.cased.} = object
@@ -114,6 +115,16 @@ suite "Wrapping NimNode":
 
     check foo("hello") == "hello"
     check foo(9) == "Not Right"
+
+suite "Wrapping JsonNode":
+  test "Type is considered cased":
+    check JsonNode is CasedObject
+
+  test "Can match JString":
+    let jsonStr = %"hello"
+    let result = if JString(val) ?== jsonStr: val
+                 else: "default"
+    check result == "hello"
 
 import ./auxOtherFile
 test "Can import another type":

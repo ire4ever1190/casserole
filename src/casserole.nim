@@ -45,16 +45,19 @@ runnableExamples:
 
   if Some(value) ?== val:
     echo value
-## The following modules are integrated to work
+## This is used to support multiple types from the Nim standard library
 ## - [Options](casserole/optionSupport.html)
 ## - [Macros](casserole/nimNodeSupport.html)
+## - [JsonNodes](casserole/jsonNodeSupport.html)
+##
+## There is also a helper library for [result type error handling](casserole/results.html)
 
 import std/[macros, strutils, sequtils, options, typetraits]
 
 import pkg/libdump/macros
 
-import ./casserole/[optionSupport, nimNodeSupport]
-export optionSupport
+import ./casserole/[optionSupport, nimNodeSupport, jsonNodeSupport]
+export optionSupport, jsonNodeSupport
 
 {.experimental: "dotOperators".}
 
@@ -339,3 +342,6 @@ macro `case`*(n: CasedObject | CaseObject): untyped =
     else:
       "Unexpected node".error(branch)
   result &= caseStmt
+
+# Extra modules to import so they are included in the docs
+import casserole/results
