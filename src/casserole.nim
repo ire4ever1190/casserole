@@ -112,7 +112,6 @@ macro generateCases(c: CaseObject, discrimValue: enum): untyped =
     )
     )
   )
-  echo result.toStrLit
 
 proc getBranch*[D; T: CaseObject](c: T, branch: static[D]): tuple =
   ## Generic function that gets the branch value for any [CaseObject]
@@ -201,6 +200,30 @@ macro `.()`*(obj, tag: untyped, values: varargs[untyped]): untyped =
     newColonExpr(tag.strVal.getTagIdent(), tupleConstr)
   )
 
+type NodeBranches = seq[tuple[tags: seq[string], fields: seq[NimNode]]]
+  ## Store of tags and the IdentDefs that they map to
+
+proc findObjectBranches(objectDecl: NimNode): NodeBranches =
+  ## Finds all branches that belong to an object
+  echo objectDecl.treeRepr
+  for ofBranch in objectDecl[2][0][1 .. ^1]:
+    let tags = ofBranch[0 ..< ^1].mapIt(it.strVal)
+    let fields = ofBranch[^1]
+    result &= (tags, fields.mapIt(it))
+
+proc findBranches(node: NimNode): NodeBranches =
+  ## Finds all branches to pull from a type
+  case node.kind
+  of nnkObjectTy:
+    node.findObjectBranches()
+  of nnkTupleTy:
+    for field in node:
+      let fields = if field[1].kind == nnkNilLit: @[] else: @[field]
+      result &= (@[field[0].strVal], fields)
+    result
+  else:
+    "Only objects and tuples can be turned into sumtypes".error(node)
+
 macro cased*(inp: untyped): untyped =
   ## Generates a case class object based on [RFC#559](https://github.com/nim-lang/RFCs/issues/559)
   runnableExamples:
@@ -210,6 +233,14 @@ macro cased*(inp: untyped): untyped =
         of Some:
           value: T
         of None: discard
+  ## There is also a shorthand syntax using tuples if you don't need multiple fields
+  ## e.g. This is equivilant notation
+  runnableExamples:
+    type
+      Optional[T] {.cased.} = tuple[
+        Some: T,
+        None: nil
+      ]
 
   # Pull some info straight from the object
   let
@@ -219,11 +250,7 @@ macro cased*(inp: untyped): untyped =
     objectDecl = if isRef: inp[2][0] else: inp[2]
 
   # Now gather all the branches. We want the names along with the fields that appear
-  var branches: seq[tuple[tags: seq[string], fields: seq[NimNode]]]
-  for ofBranch in objectDecl[2][0][1 .. ^1]:
-    let tags = ofBranch[0 ..< ^1].mapIt(it.strVal)
-    let fields = ofBranch[^1]
-    branches &= (tags, fields.mapIt(it))
+  var branches = objectDecl.findBranches()
 
   # Using the possible tags, we need to build the enum
   let enumName = nskType.genSym(name & "Tag")

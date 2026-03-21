@@ -17,6 +17,12 @@ type
     of Right:
       right: R
 
+  Node {.cased.} = tuple[
+    Int: int,
+    String: string,
+    Void: nil,
+    List: seq[Node]
+  ]
 
 suite "Unpacking":
   let
@@ -61,6 +67,16 @@ suite "Unpacking":
   test "Raises branch defect for wrong branch":
     expect FieldDefect:
       Left(_) ?= Maybe[int, int].Right(1)
+
+suite "Shorthand syntax":
+  test "Can use short hand syntax":
+    let id = Node.Int(1)
+    Int(num) ?= id
+    check num == 1
+
+  test "Can use `nil` fields":
+    let nothing = Node.Void()
+    check Void() ?== nothing
 
 suite "Wrapping Option":
   let

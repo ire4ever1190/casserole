@@ -19,6 +19,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: "Run Tests"
+        run: nimble test
+
       - name: "Build documentation"
         uses: ire4ever1190/nim-docs-action@v2
         with:
