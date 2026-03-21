@@ -1,5 +1,7 @@
 ## This library supports making sum types without needing a separate enum with like variants.
-## This gives support for having fields with the same name along with safe unpacking of values
+## This gives support for having fields with the same name along with safe unpacking of values.
+##
+## For example, we could construct an `Option` type like so
 runnableExamples:
   type
     # Types have the {.cased.} pragma to generate a sum type
@@ -28,12 +30,21 @@ runnableExamples:
     echo "Its " & value
   of None():
     echo "There was no value =("
+## This is useless though! Since this library has support for `std/options` so no need to define a new type
+runnableExamples:
+  import std/options
+
+  let val = some("Hello")
+
+  # Everything works like in the example before (Branches are still Some/None)
+  if Some(value) ?= val:
+    echo value
 
 import std/[macros, strutils, sequtils, options]
 
 import pkg/libdump/macros
 
-import ./caseobj/optionSupport
+import ./casserole/optionSupport
 export optionSupport
 
 {.experimental: "dotOperators".}

@@ -1,6 +1,6 @@
-# CaseObj
+# Casserole 
 
-Library that adds support for sum types with pattern matching. 
+Library that adds support for sum types/case objects with pattern matching. 
 Also integrates with `std/options` for easy integration with existing code.
 
 WIP so expect (and report) bugs that you encounter

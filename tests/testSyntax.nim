@@ -7,7 +7,7 @@
 
 import std/[unittest, options]
 
-import casobj
+import casserole
 
 type
   Maybe*[L, R] {.cased.} = object
