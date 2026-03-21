@@ -31,11 +31,22 @@ runnableExamples:
 
 import std/[macros, strutils, sequtils]
 
+import ./caseobj/optionSupport
+export optionSupport
+
 {.experimental: "dotOperators".}
 
 type
   CaseObject*[D] = object of RootObj
-    ## Type class for accepting a case object
+    ## Type class for accepting a case object.
+    ## `D` is the discriminator for the fields
+
+  CasedObject*[D, R] = concept
+    ## This gets implemented for custom types to integrate them into cased pattern matching.
+    proc currentBranch(val: Self): D
+      ## This must return the current discriminator value for an object
+    proc getBranch(val: Self, branch: static[D]): R
+      ## This must return the value of a branch. Can raise a fieldDefect if in wrong state
 
 proc getTagIdent(tag: string): NimNode =
   ## Returns the identifier for a tag
@@ -49,23 +60,44 @@ proc collectFields(pattern: NimNode): seq[tuple[ident: NimNode, index: int]] =
   for i in 1 ..< pattern.len:
     result &= (pattern[i], i - 1)
 
-macro `?=`*(lhs: untyped, rhs: CaseObject): untyped =
+proc getBranch(pattern, branch: NimNode): NimNode =
+  ## Returns a call that retrives the branch value for an object
+  return newCall("getBranch", pattern, branch)
+
+proc getCurrentBranch(pattern: NimNode): NimNode =
+  ## Returns a call that retrieves the current branch of an object
+  return newCall("currentBranch", pattern)
+
+macro generateCases(c: CaseObject): untyped =
+  ## Generates all the `when` statements for getting a branch from
+  ## the discriminator
+
+
+proc getBranch*[D; T: CaseObject](c: T, branch: static[D]): tuple =
+  ## Generic function that gets the branch value for any [CaseObject]
+  generateCases(c)
+
+proc currentBranch*[D; T: CaseObject[D]](c: T): D =
+  ## Returns the current state that a [CaseObject] is in
+  c.kind
+
+macro `?=`*(lhs: untyped, rhs: CaseObject | CasedObject): untyped =
   ## Unpacks a cased object into an expected type.
   ## Raises a field defect if its the wrong type
   result = nnkLetSection.newTree()
 
-  let branch = newDotExpr(rhs, lhs[0].strVal.getTagIdent())
+  let branch = getBranch(rhs, ident lhs[0].strVal)
 
   for i in 1 ..< lhs.len:
     result &= newIdentDefs(lhs[i], newEmptyNode(), nnkBracketExpr.newTree(branch, newLit i - 1))
 
-macro `?==`*(lhs: untyped, rhs: CaseObject): bool =
+macro `?==`*(lhs: untyped, rhs: CaseObject | CasedObject): bool =
   ## Like [?=] except doesn't raise an error. This is meant
   ## to be used inside `if` statements for unpacking a value.
   ## Variables will still be added to scope for wrong branch, but won't be initialised
   let
-    branch = newDotExpr(rhs, lhs[0].strVal.getTagIdent())
-    rightBranch = newCall(ident"==", newDotExpr(rhs, ident"kind"), lhs[0])
+    branch = getBranch(rhs, ident lhs[0].strVal)
+    rightBranch = newCall(ident"==", getCurrentBranch(rhs), lhs[0])
 
   result = newStmtList()
 
@@ -171,7 +203,7 @@ macro cased*(inp: untyped): untyped =
     nnkTypeDef.newTree(inp[0], inp[1], newObjectDecl)
   )
 
-macro `case`*(n: CaseObject): untyped =
+macro `case`*(n: CasedObject | CaseObject): untyped =
   ## Macro that adds support for pattern matching via case statement/expression.
   ## This supports the same syntax as [?=]
   result = newStmtList()
@@ -180,7 +212,7 @@ macro `case`*(n: CaseObject): untyped =
   let valueIdent = nskLet.genSym"value"
   result &= newLetStmt(valueIdent, n[0])
 
-  let caseStmt = nnkCaseStmt.newTree(newDotExpr(valueIdent, ident"kind"))
+  let caseStmt = nnkCaseStmt.newTree(getCurrentBranch(valueIdent))
   for branch in n[1 .. ^1]:
     case branch.kind
     of nnkOfBranch:
