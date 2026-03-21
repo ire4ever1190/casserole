@@ -45,12 +45,15 @@ runnableExamples:
 
   if Some(value) ?== val:
     echo value
+## The following modules are integrated to work
+## - [Options](casserole/optionSupport.html)
+## - [Macros](casserole/nimNodeSupport.html)
 
 import std/[macros, strutils, sequtils, options]
 
 import pkg/libdump/macros
 
-import ./casserole/optionSupport
+import ./casserole/[optionSupport, nimNodeSupport]
 export optionSupport
 
 {.experimental: "dotOperators".}

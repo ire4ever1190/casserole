@@ -5,9 +5,10 @@
 #
 # To run these tests, simply execute `nimble test`.
 
-import std/[unittest, options]
+import std/[unittest, options, macros]
 
 import casserole
+import casserole/nimNodeSupport
 
 type
   Maybe*[L, R] {.cased.} = object
@@ -83,6 +84,9 @@ suite "Wrapping Option":
     someVal = some("hello")
     noneVal = none(string)
 
+  test "Type is considered cased":
+    check Option[string] is CasedObject
+
   test "Some can be unpacked directly":
     Some(v) ?= someVal
     check v == someVal.get()
@@ -97,3 +101,16 @@ suite "Wrapping Option":
             of None(): "Got nothing"
             of Some(v): v
     check v == "Got nothing"
+
+suite "Wrapping NimNode":
+  test "Type is considered cased":
+    check NimNode is CasedObject
+
+  test "Basic node":
+    macro foo(x: untyped): string =
+      let val = if StrLit(inner) ?== x: inner
+                else: "Not Right"
+      return newLit val
+
+    check foo("hello") == "hello"
+    check foo(9) == "Not Right"
