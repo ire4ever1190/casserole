@@ -204,7 +204,7 @@ macro `?==`*(lhs: untyped, rhs: CaseObject | CasedObject): bool =
   # Finally, let the user know if its safe to use the values
   result &= rightBranch
 
-macro `.()`*(obj, tag: untyped, values: varargs[untyped]): untyped =
+macro `.()`*(obj: untyped, tag: enum, values: varargs[untyped]): untyped =
   ## This is used for constructor a cased object.
   ## Construction is done in the form `Object.Tag(params...)`
   # TODO: Support named field construction
@@ -268,28 +268,35 @@ macro cased*(inp: untyped): untyped =
     genericParams = inp[1]
     isRef = inp[2].kind == nnkRefTy
     objectDecl = if isRef: inp[2][0] else: inp[2]
+    isPublic = inp[0].isPublic
+
+  proc maybePublic(inp: NimNode): NimNode =
+    if isPublic: inp.public else: inp
 
   # Now gather all the branches. We want the names along with the fields that appear
   var branches = objectDecl.findBranches()
 
   # Using the possible tags, we need to build the enum
   let enumName = nskType.genSym(name & "Tag")
+
+
   let enumDecl = block:
     let body = nnkEnumTy.newTree(newEmptyNode())
     for (tags, _) in branches:
       body &= tags.mapIt(ident it)
-    nnkTypeDef.newTree(enumName, newEmptyNode(), body)
+    nnkTypeDef.newTree(enumName.maybePublic(), newEmptyNode(), body)
 
   # Now build the object. It will have each field be the name of the tag
   # with the value being a tuple
   let newObjectDecl = block:
-    let caseStmt = nnkRecCase.newTree(nnkIdentDefs.newTree(ident"kind", enumName, newEmptyNode()))
+    let caseStmt = nnkRecCase.newTree(newIdentDefs(ident"kind", enumName).maybePublic())
     # Add all the branches
     for (tags, fields) in branches:
       let ofBranch = newNimNode(nnkOfBranch).add(tags.mapIt(ident it))
       # TODO: Support multiple fields
+      let fieldName = tags[0].getTagIdent()
       ofBranch &= nnkRecList.newTree(
-        nnkIdentDefs.newTree(getTagIdent tags[0], nnkTupleTy.newTree(fields), newEmptyNode())
+        newIdentDefs(fieldName.maybePublic(), nnkTupleTy.newTree(fields))
       )
       caseStmt &= ofBranch
 
@@ -301,6 +308,7 @@ macro cased*(inp: untyped): untyped =
     enumDecl,
     nnkTypeDef.newTree(inp[0], inp[1], newObjectDecl)
   )
+  echo result.toStrLit
 
 macro `case`*(n: CasedObject | CaseObject): untyped =
   ## Macro that adds support for pattern matching via case statement/expression.

@@ -1,38 +1,65 @@
 ## Basic `Result[T, E]` style object that holds either a value or an error.
 ## This is useful when you want the caller to handle the error instead of bubbling
-## it as an exception
+## it as an exception.
+##
+## Based a lot on [results](https://github.com/arnetheduck/nim-results/blob/master/results.nim) by arnetheduck
 
 import ../casserole
 
 type
-  Result[T, E] {.cased.} = tuple[
-    Ok: T,
-    Error: E
-  ]
+  Result*[T, E] {.cased.} = tuple
+    Ok: T ## A value is contained, no issues
+    Error: E ## Something happened and there is an error that should be checked
 
 func ok*[T, E](res: out Result[T, E], val: T) =
   ## Initialises an existing result with `Ok` value.
   ## Useful for assigning the return variable
+  runnableExamples:
+    proc main(): Result[string, int] =
+      result.ok("Hello World")
+
   res = Result[T, E].Ok(val)
 
 func error*[T, E](res: out Result[T, E], err: E) =
   ## Initialises an existing result with `Error` value.
   ## Useful for assigning the return variable
+  runnableExamples:
+    proc main(): Result[string, int] =
+      result.error(QuitFailure)
+
   res = Result[T, E].Error(err)
 
 template ok(val): Result =
   ## Infers the `Result` type based on the `result` variable
+  runnableExamples:
+    proc main(): Result[string, int] =
+      ok("Hello World")
   result.ok(val)
   result
 
 template error(err): Result =
   ## Infers the `Result` type based on the `result` variable
+  runnableExamples:
+    proc main(): Result[string, int] =
+      error(QuitFailure)
   result.error(err)
   result
 
 template `?`*[T, E](res: Result[T, E]): T =
   ## Syntax sugar which returns `res` if its an error and returns
   ## the value if its ok
+  runnableExamples:
+    proc mightFail(inp: int): Result[int, string] =
+      if inp > 10: error("Too high: " & $inp)
+      else: inp * 2
+
+    proc someCalc(): Result[int, string] =
+      # First call passes, but second call fails and causes whole function to return
+      ok ?mightFail(4) + mightFail(15)
+
+    Error(msg) ?= someCalc()
+    assert msg == "Too high: 15"
+
   case res
   of Ok(val): val
   of Error(_): return res
