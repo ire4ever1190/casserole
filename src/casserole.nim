@@ -49,7 +49,7 @@ runnableExamples:
 ## - [Options](casserole/optionSupport.html)
 ## - [Macros](casserole/nimNodeSupport.html)
 
-import std/[macros, strutils, sequtils, options]
+import std/[macros, strutils, sequtils, options, typetraits]
 
 import pkg/libdump/macros
 
@@ -74,7 +74,8 @@ proc getTagIdent(tag: string): NimNode =
   ## Returns the identifier for a tag
   return tag.toLowerAscii().ident
 
-proc collectFields(pattern: NimNode): seq[tuple[ident: NimNode, index: int]] =
+type PatternField = tuple[ident: NimNode, index: int]
+proc collectFields(pattern: NimNode): seq[PatternField] =
   ## Returns all the fields in a pattern.
   ## - `ident`: what identifier it should be unpacked into
   ## - `index`: Index into the tuple of the branch this field belongs to
@@ -132,6 +133,16 @@ template branchCheck(obj, branch: untyped) =
     if currentBranch != branch:
       raise (ref FieldDefect)(msg: "Trying to access " & $branch & " but object is " & $currentBranch)
 
+type
+  Pattern = object
+    tag: string
+    fields: seq[PatternField]
+
+proc parsePattern(node: NimNode): Pattern =
+  if node.kind != nnkCall or node[0].kind != nnkIdent:
+    "Expecting pattern to be in form `Branch(...)`".error(node)
+  return Pattern(tag: node[0].strVal, fields: node.collectFields())
+
 macro `?=`*(lhs: untyped, rhs: CaseObject | CasedObject): untyped =
   ## Unpacks a cased object into an expected type.
   ## Raises a field defect if its the wrong type
@@ -145,14 +156,16 @@ macro `?=`*(lhs: untyped, rhs: CaseObject | CasedObject): untyped =
 
   result = nnkLetSection.newTree()
 
-  let branch = getBranch(rhs, ident lhs[0].strVal)
+  let
+    pattern = lhs.parsePattern()
+    branch = getBranch(rhs, ident pattern.tag)
 
-  for (ident, idx) in lhs.collectFields:
+  for (ident, idx) in pattern.fields:
     result &= newIdentDefs(ident, newEmptyNode(), newBracketExpr(branch, newLit idx))
 
   # We still need to add a check so field defects are thrown for bad branches
   result = newStmtList(
-    newCall(bindSym"branchCheck", rhs, lhs[0]),
+    newCall(bindSym"branchCheck", rhs, ident pattern.tag),
     result
   )
 
@@ -170,19 +183,20 @@ macro `?==`*(lhs: untyped, rhs: CaseObject | CasedObject): bool =
       echo "Great, we have " & $value
 
   let
-    branch = getBranch(rhs, ident lhs[0].strVal)
-    rightBranch = newCall(ident"==", getCurrentBranch(rhs), lhs[0])
+    pattern = lhs.parsePattern()
+    branch = getBranch(rhs, ident pattern.tag)
+    rightBranch = newCall(ident"==", getCurrentBranch(rhs), ident pattern.tag)
 
   result = newStmtList()
 
   # First we need to generate all the variables these will get unpacked into.
   # Probs has performance issues since we are creating values even for wrong branch, but oh well
-  for (ident, idx) in lhs.collectFields:
+  for (ident, idx) in pattern.fields:
     result &= newVarStmt(ident, newCall("default", newCall("typeof", nnkBracketExpr.newTree(branch, newLit idx))))
 
   # Now if its the right branch, we can perform the unpacking
   let unpackBranch = newStmtList()
-  for (ident, idx) in lhs.collectFields:
+  for (ident, idx) in pattern.fields:
     unpackBranch &= newAssignment(ident, nnkBracketExpr.newTree(branch, newLit idx))
 
   result &= nnkIfStmt.newTree(nnkElifBranch.newTree(rightBranch, unpackBranch))
@@ -208,8 +222,11 @@ type NodeBranches = seq[tuple[tags: seq[string], fields: seq[NimNode]]]
 
 proc findObjectBranches(objectDecl: NimNode): NodeBranches =
   ## Finds all branches that belong to an object
-  echo objectDecl.treeRepr
-  for ofBranch in objectDecl[2][0][1 .. ^1]:
+  let caseNodes = objectDecl[2][0]
+  if caseNodes.kind != nnkRecCase:
+    "Object must just have a single case statement and no other fields".error(caseNodes)
+
+  for ofBranch in caseNodes[1 .. ^1]:
     let tags = ofBranch[0 ..< ^1].mapIt(it.strVal)
     let fields = ofBranch[^1]
     result &= (tags, fields.mapIt(it))
