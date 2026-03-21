@@ -114,3 +114,7 @@ suite "Wrapping NimNode":
 
     check foo("hello") == "hello"
     check foo(9) == "Not Right"
+
+import ./auxOtherFile
+test "Can import another type":
+  check A(_) ?== SomeType.A(9)

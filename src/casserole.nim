@@ -257,10 +257,9 @@ macro cased*(inp: untyped): untyped =
   ## e.g. This is equivilant notation
   runnableExamples:
     type
-      Optional[T] {.cased.} = tuple[
-        Some: T,
+      Optional[T] {.cased.} = tuple
+        Some: T
         None: nil
-      ]
 
   # Pull some info straight from the object
   let
