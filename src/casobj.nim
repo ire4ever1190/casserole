@@ -29,7 +29,9 @@ runnableExamples:
   of None():
     echo "There was no value =("
 
-import std/[macros, strutils, sequtils]
+import std/[macros, strutils, sequtils, options]
+
+import pkg/libdump/macros
 
 import ./caseobj/optionSupport
 export optionSupport
@@ -68,14 +70,22 @@ proc getCurrentBranch(pattern: NimNode): NimNode =
   ## Returns a call that retrieves the current branch of an object
   return newCall("currentBranch", pattern)
 
-macro generateCases(c: CaseObject): untyped =
+macro generateCases(c: CaseObject, discrimValue: enum): untyped =
   ## Generates all the `when` statements for getting a branch from
   ## the discriminator
+  let branches = c.getObjectDecl().get()[2][0][1 .. ^1]
+  result = nnkWhenStmt.newTree()
 
+  # Just look through the generated variant object and line everything up
+  for branch in branches:
+    result &= nnkElifBranch.newTree(
+      newCall(ident"==", discrimValue, branch[0]),
+      newStmtList(newDotExpr(c, ident branch[1][0][0].strVal))
+    )
 
 proc getBranch*[D; T: CaseObject](c: T, branch: static[D]): tuple =
   ## Generic function that gets the branch value for any [CaseObject]
-  generateCases(c)
+  generateCases(c, branch)
 
 proc currentBranch*[D; T: CaseObject[D]](c: T): D =
   ## Returns the current state that a [CaseObject] is in

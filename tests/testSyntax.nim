@@ -18,19 +18,6 @@ type
       right: R
 
 
-  OptionTag = enum
-    Some
-    None
-
-proc getBranch(o: Option, branch: static[OptionTag]): tuple =
-  when branch == Some:
-    (value: o.get())
-  else:
-    default(tuple[])
-
-proc currentBranch(o: Option): OptionTag =
-  if o.isSome(): Some else: None
-
 suite "Unpacking":
   let
     someValue = Maybe[string, int].Left("hello")
