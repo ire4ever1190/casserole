@@ -42,3 +42,10 @@ suite "Unpacking":
                 of Some(value): value
                 else: "Nothing"
     check value == "hello"
+
+  test "Case statements can be exhaustive":
+    # The test is if this compiles
+    let value = case noValue
+                of Some(value): value
+                of None(): "Nothing"
+    check value == "Nothing"

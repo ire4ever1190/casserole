@@ -173,22 +173,24 @@ macro cased*(inp: untyped): untyped =
 
 macro `case`*(n: CaseObject): untyped =
   ## Macro that adds support for pattern matching via case statement/expression.
-  ## This supports the same syntax as [?==]
-  # Currently just desugars to a series of `?==` calls
-  # Will need to optimise in the future so it checks the tag directly first
+  ## This supports the same syntax as [?=]
   result = newStmtList()
 
   # We store the passed in object so it doesn't get reevaulated multiple times
   let valueIdent = nskLet.genSym"value"
   result &= newLetStmt(valueIdent, n[0])
 
-  let ifStmt = nnkIfStmt.newTree()
+  let caseStmt = nnkCaseStmt.newTree(newDotExpr(valueIdent, ident"kind"))
   for branch in n[1 .. ^1]:
     case branch.kind
     of nnkOfBranch:
-      ifStmt &= nnkElifBranch.newTree(newCall(bindSym"?==", branch[0], valueIdent), branch[1])
+      let body = newStmtList(
+        newCall(bindSym"?=", branch[0], valueIdent),
+        branch[1]
+      )
+      caseStmt &= nnkOfBranch.newTree(branch[0][0], body)
     of nnkElse:
-      ifStmt &= branch
+      caseStmt &= branch
     else:
       "Unexpected node".error(branch)
-  result &= ifStmt
+  result &= caseStmt
