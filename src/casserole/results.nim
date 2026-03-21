@@ -64,11 +64,11 @@ template `?`*[T, E](res: Result[T, E]): T =
   of Ok(val): val
   of Error(_): return res
 
-template catchEm[T](body: T): Result[T, CatchableError] =
+template catchEm*[T](body: T): Result[T, ref CatchableError] =
   ## Runs `body` and catches any exceptions that are thrown.
   ## Defects are not caught and will bubble through
   runnableExamples:
-    proc someExceptionalFunction() =
+    proc someExceptionalFunction(): Result[string, ref CatchableError] =
       raise (ref ValueError)(msg: "Did something wrong")
 
     # No exception bubbles past, we have caught it
@@ -79,9 +79,9 @@ template catchEm[T](body: T): Result[T, CatchableError] =
     assert err.msg == "Did something wrong"
 
   try:
-    ok(body)
+    Result[T, ref CatchableError].Ok(body)
   except CatchableError as e:
-    error(e)
+    Result[T, ref CatchableError].Error(e)
 
 proc `or`*[T, E0, E1](first: Result[T, E0], second: Result[T, E1]): Result[T, E1] =
   ## First tries to access the value in first, if that fails then it attempts to get it from the second.
