@@ -8,7 +8,7 @@ WIP so expect (and report) bugs that you encounter
 ## Example
 
 ```nim
-import caseobj
+import casserole
 import std/random
 
 type
@@ -30,7 +30,7 @@ proc possiblyFails(): Result[int, string] =
 let res = possiblyFails()
 
 # Can extract via pattern matching with `if`/`case` statements
-if Ok(randVal) ?= res:
+if Ok(randVal) ?== res:
   echo "We got: " & $randVal
   
 # Case statements check for exhaustiveness

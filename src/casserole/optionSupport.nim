@@ -1,7 +1,7 @@
 ## This module implements support for using [std/options](https://nim-lang.org/docs/options.html)
 ## with pattern matching
 runnableExamples:
-  import caseobj
+  import casserole
   import std/options
 
   proc tryGet[T](items: openArray[T], i: int): Option[T] =

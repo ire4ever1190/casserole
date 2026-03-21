@@ -1,43 +1,49 @@
 ## This library supports making sum types without needing a separate enum with like variants.
 ## This gives support for having fields with the same name along with safe unpacking of values.
 ##
-## For example, we could construct an `Option` type like so
+## For example, we could construct an `Result` type like so
 runnableExamples:
+  import casserole
+  import std/random
+
   type
-    # Types have the {.cased.} pragma to generate a sum type
-    Optional*[T] {.cased.} = object
-      # No need for an enum, just declare the branches!
+    # You must attach the `{.cased.}` pragma
+    Result*[T, E] {.cased.} = object
       case
-      of Some:
-        # Can store multiple fields, in this example we just have the field `value`
+      of Ok:
+        # Throw your fields into each branch
         value: T
-      of None: nil
+      of Error:
+        error: E
 
-  # The syntax of Object.Branch(...params) is used to construct the object
-  let some = Optional[string].Some("hello")
+  # Looks like any other type
+  proc possiblyFails(): Result[int, string] =
+    if sample([true, false]):
+      # Constructed by referencing the type and the branch
+      Result[int, string].Ok(rand(100))
+    else:
+      Result[int, string].Error("Failed for some reason =(")
 
-  # You can then unpack a value inline (This throws a FieldDefect if you are wrong!)
-  Some(value) ?= some
-  assert value == "hello"
+  let res = possiblyFails()
 
-  # You can also safely unpack via if statements/expressions
-  if Some(value) ?== some:
-    echo "Safely got: " & value
+  # Can extract via pattern matching with `if`/`case` statements
+  if Ok(randVal) ?== res:
+    echo "We got: " & $randVal
 
-  # Or case statements/expressions
-  case some
-  of Some(value):
-    echo "Its " & value
-  of None():
-    echo "There was no value =("
-## This is useless though! Since this library has support for `std/options` so no need to define a new type
+  # Case statements check for exhaustiveness
+  case res
+  of Ok(randVal):
+    echo "Was something"
+  of Error(error):
+    echo "It failed"
+## I could show you how to make an `Option[T]` type but that would be redundant since this libray supports `std/options`!
 runnableExamples:
   import std/options
 
   let val = some("Hello")
 
   # Everything works like in the example before (Branches are still Some/None)
-  if Some(value) ?= val:
+  if Some(value) ?== val:
     echo value
 
 import std/[macros, strutils, sequtils, options]
@@ -91,8 +97,16 @@ macro generateCases(c: CaseObject, discrimValue: enum): untyped =
   for branch in branches:
     result &= nnkElifBranch.newTree(
       newCall(ident"==", discrimValue, branch[0]),
-      newStmtList(newDotExpr(c, ident branch[1][0][0].strVal))
+      newStmtList(newDotExpr(c, branch[1][0][0]))
     )
+  result &= nnkElse.newTree(  nnkPragma.newTree(
+    nnkExprColonExpr.newTree(
+      newIdentNode("error"),
+      newLit("Failed?")
+    )
+    )
+  )
+  echo result.toStrLit
 
 proc getBranch*[D; T: CaseObject](c: T, branch: static[D]): tuple =
   ## Generic function that gets the branch value for any [CaseObject]
@@ -149,22 +163,6 @@ macro `.()`*(obj, tag: untyped, values: varargs[untyped]): untyped =
     newColonExpr(ident"kind", tag),
     newColonExpr(tag.strVal.getTagIdent(), tupleConstr)
   )
-
-block:
-  type
-    OptionalTag = enum
-      Some
-      None
-    Optional[T] = object of CaseObject[OptionalTag]
-      case kind: OptionalTag
-      of Some:
-        some: (T,)
-      of None:
-        none: tuple[]
-
-# proc add(parent: NimNode, children: openArray[NimNode]) =
-#   for child in children:
-#     parent &= child
 
 proc newBracketExpr(a, b: NimNode): NimNode =
   ## Helper syntax for making bracket expr
