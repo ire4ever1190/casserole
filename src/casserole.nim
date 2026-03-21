@@ -116,11 +116,11 @@ macro generateCases(c: CaseObject, discrimValue: enum): untyped =
     )
   )
 
-proc getBranch*[D; T: CaseObject](c: T, branch: static[D]): tuple =
+template getBranch*[D; T: CaseObject](c: T, branch: static[D]): tuple =
   ## Generic function that gets the branch value for any [CaseObject]
   generateCases(c, branch)
 
-proc currentBranch*[D; T: CaseObject[D]](c: T): D =
+template currentBranch*[D; T: CaseObject[D]](c: T): D =
   ## Returns the current state that a [CaseObject] is in
   c.kind
 

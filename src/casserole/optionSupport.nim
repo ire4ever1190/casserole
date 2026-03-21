@@ -29,13 +29,13 @@ type
     Some ## When `Option` has a value
     None ## When `Option` has no value
 
-proc getBranch*(o: Option, branch: static[OptionTag]): tuple =
+template getBranch*(o: Option, branch: static[OptionTag]): tuple =
   ## Returns either the value or an empty tuple
   when branch == Some:
     (value: o.get())
   else:
     default(tuple[])
 
-proc currentBranch*(o: Option): OptionTag =
+template currentBranch*(o: Option): OptionTag =
   ## Maps `Option` to an `OptionTag`
   if o.isSome(): Some else: None
