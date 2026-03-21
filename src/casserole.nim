@@ -77,7 +77,8 @@ proc collectFields(pattern: NimNode): seq[tuple[ident: NimNode, index: int]] =
   ## - `index`: Index into the tuple of the branch this field belongs to
 
   for i in 1 ..< pattern.len:
-    result &= (pattern[i], i - 1)
+    if not pattern[i].eqIdent("_"): # Don't generate for _
+      result &= (pattern[i], i - 1)
 
 proc getBranch(pattern, branch: NimNode): NimNode =
   ## Returns a call that retrives the branch value for an object
@@ -86,6 +87,11 @@ proc getBranch(pattern, branch: NimNode): NimNode =
 proc getCurrentBranch(pattern: NimNode): NimNode =
   ## Returns a call that retrieves the current branch of an object
   return newCall("currentBranch", pattern)
+
+proc newBracketExpr(a, b: NimNode): NimNode =
+  ## Helper syntax for making bracket expr
+  return nnkBracketExpr.newTree(a, b)
+
 
 macro generateCases(c: CaseObject, discrimValue: enum): untyped =
   ## Generates all the `when` statements for getting a branch from
@@ -123,8 +129,8 @@ macro `?=`*(lhs: untyped, rhs: CaseObject | CasedObject): untyped =
 
   let branch = getBranch(rhs, ident lhs[0].strVal)
 
-  for i in 1 ..< lhs.len:
-    result &= newIdentDefs(lhs[i], newEmptyNode(), nnkBracketExpr.newTree(branch, newLit i - 1))
+  for (ident, idx) in lhs.collectFields:
+    result &= newIdentDefs(ident, newEmptyNode(), newBracketExpr(branch, newLit idx))
 
 macro `?==`*(lhs: untyped, rhs: CaseObject | CasedObject): bool =
   ## Like [?=] except doesn't raise an error. This is meant
@@ -163,10 +169,6 @@ macro `.()`*(obj, tag: untyped, values: varargs[untyped]): untyped =
     newColonExpr(ident"kind", tag),
     newColonExpr(tag.strVal.getTagIdent(), tupleConstr)
   )
-
-proc newBracketExpr(a, b: NimNode): NimNode =
-  ## Helper syntax for making bracket expr
-  return nnkBracketExpr.newTree(a, b)
 
 macro cased*(inp: untyped): untyped =
   ## Generates a case class object based on [RFC#559](https://github.com/nim-lang/RFCs/issues/559)

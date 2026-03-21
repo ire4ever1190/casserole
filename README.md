@@ -39,4 +39,5 @@ of Ok(randVal):
   echo "Was something"
 of Error(error):
   echo "It failed"
+  
 ```

@@ -52,6 +52,12 @@ suite "Unpacking":
                 of Right(value): "Nothing"
     check value == "Nothing"
 
+  test "Can ignore values with `_`":
+    let value = case noValue
+                of Left(_): "left"
+                of Right(_): "right"
+    check value == "right"
+
 suite "Wrapping Option":
   let
     someVal = some("hello")
