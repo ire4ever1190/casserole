@@ -100,7 +100,7 @@ proc newBracketExpr(a, b: NimNode): NimNode =
   return nnkBracketExpr.newTree(a, b)
 
 
-macro generateCases(c: CaseObject, discrimValue: enum): untyped =
+macro generateCases[D](c: CaseObject[D], discrimValue: D): untyped =
   ## Generates all the `when` statements for getting a branch from
   ## the discriminator
   let branches = c.getObjectDecl().get()[2][0][1 .. ^1]
@@ -120,7 +120,7 @@ macro generateCases(c: CaseObject, discrimValue: enum): untyped =
     )
   )
 
-template getBranch*[D; T: CaseObject](c: T, branch: static[D]): tuple =
+template getBranch*[T: CaseObject](c: T, branch: untyped): tuple =
   ## Generic function that gets the branch value for any [CaseObject]
   generateCases(c, branch)
 
@@ -134,7 +134,9 @@ template branchCheck(obj, branch: untyped) =
   when not defined(danger):
     let currentBranch = obj.currentBranch
     if currentBranch != branch:
-      raise (ref FieldDefect)(msg: "Trying to access " & $branch & " but object is " & $currentBranch)
+      # Narrow the type to handle ambigious identifiers (e.g. Result.Ok and TestStatus.Ok)
+      let b: typeof(currentBranch) = branch
+      raise (ref FieldDefect)(msg: "Trying to access " & $b & " but object is " & $currentBranch)
 
 type
   Pattern = object
@@ -142,7 +144,8 @@ type
     fields: seq[PatternField]
 
 proc parsePattern(node: NimNode): Pattern =
-  if node.kind != nnkCall or node[0].kind != nnkIdent:
+  if node.kind != nnkCall or node[0].kind notin {nnkIdent, nnkSym}:
+    echo node.treeRepr
     "Expecting pattern to be in form `Branch(...)`".error(node)
   return Pattern(tag: node[0].strVal, fields: node.collectFields())
 
@@ -207,7 +210,7 @@ macro `?==`*(lhs: untyped, rhs: CaseObject | CasedObject): bool =
   # Finally, let the user know if its safe to use the values
   result &= rightBranch
 
-macro `.()`*(obj: untyped, tag: enum, values: varargs[untyped]): untyped =
+macro `.()`*(obj: untyped, tag: untyped, values: varargs[untyped]): untyped =
   ## This is used for constructor a cased object.
   ## Construction is done in the form `Object.Tag(params...)`
   # TODO: Support named field construction
@@ -260,9 +263,10 @@ macro cased*(inp: untyped): untyped =
   ## e.g. This is equivilant notation
   runnableExamples:
     type
-      Optional[T] {.cased.} = tuple
-        Some: T
+      Optional[T] {.cased.} = tuple[
+        Some: T,
         None: nil
+      ]
 
   # Pull some info straight from the object
   let

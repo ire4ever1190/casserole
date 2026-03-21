@@ -18,7 +18,7 @@ func ok*[T, E](res: out Result[T, E], val: T) =
     proc main(): Result[string, int] =
       result.ok("Hello World")
 
-  res = Result[T, E].Ok(val)
+  res = typeof(res).Ok(val)
 
 func error*[T, E](res: out Result[T, E], err: E) =
   ## Initialises an existing result with `Error` value.
@@ -27,9 +27,9 @@ func error*[T, E](res: out Result[T, E], err: E) =
     proc main(): Result[string, int] =
       result.error(QuitFailure)
 
-  res = Result[T, E].Error(err)
+  res = typeof(res).Error(err)
 
-template ok(val): Result =
+template ok*(val): Result =
   ## Infers the `Result` type based on the `result` variable
   runnableExamples:
     proc main(): Result[string, int] =
@@ -37,7 +37,7 @@ template ok(val): Result =
   result.ok(val)
   result
 
-template error(err): Result =
+template error*(err): Result =
   ## Infers the `Result` type based on the `result` variable
   runnableExamples:
     proc main(): Result[string, int] =
@@ -51,11 +51,11 @@ template `?`*[T, E](res: Result[T, E]): T =
   runnableExamples:
     proc mightFail(inp: int): Result[int, string] =
       if inp > 10: error("Too high: " & $inp)
-      else: inp * 2
+      else: ok(inp * 2)
 
     proc someCalc(): Result[int, string] =
       # First call passes, but second call fails and causes whole function to return
-      ok ?mightFail(4) + mightFail(15)
+      ok ?mightFail(4) + ?mightFail(15)
 
     Error(msg) ?= someCalc()
     assert msg == "Too high: 15"
@@ -92,3 +92,5 @@ proc `or`*[T, E0, E1](first: Result[T, E0], second: Result[T, E1]): Result[T, E1
     case second
     of Ok(_): second
     of Error(_): second
+
+export casserole
