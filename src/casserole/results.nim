@@ -5,6 +5,7 @@
 ## Based a lot on [results](https://github.com/arnetheduck/nim-results/blob/master/results.nim) by arnetheduck
 
 import ../casserole
+import std/sugar
 
 type
   Result*[T, E] {.cased.} = tuple
@@ -28,6 +29,19 @@ func error*[T, E](res: out Result[T, E], err: E) =
       result.error(QuitFailure)
 
   res = typeof(res).Error(err)
+
+func map*[T, R, E](res: Result[T, E], body: T -> R): Result[R, E] {.effectsOf: body.}=
+  ## Performs an operation on a result (if it didn't fail) and returns that
+  ## as a new result
+  case res
+  of Error(_): res
+  of Ok(val): ok(body(val))
+
+func flatMap*[T, R, E](res: Result[T, E], body: T -> Result[R, E]): Result[R, E] {.effectsOf: body.} =
+  ## Like [map] except it flattens the result
+  case res
+  of Error(_): res
+  of Ok(val): body(val)
 
 template ok*(val): Result =
   ## Infers the `Result` type based on the `result` variable
