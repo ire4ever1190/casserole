@@ -13,8 +13,17 @@ test "Can return ok value":
   Ok(val) ?= hello()
   check val == 1
 
-test "No issues if user has type called `Error`":
+suite "Symbol binding": # TODO: Move these tests somewhere more generic
   proc hello(): Result[int, string] =
     result.error("Bad")
-  Error(val) ?= hello()
-  check val == "Bad"
+
+  test "No issues if user has type called `Error`":
+
+    Error(val) ?= hello()
+    check val == "Bad"
+
+  test "No issues unpacking":
+    let idk = case hello()
+              of Error(val): val
+              of Ok(_): "Was fine?"
+    check idk == "Bad"

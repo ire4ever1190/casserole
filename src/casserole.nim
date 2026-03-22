@@ -420,7 +420,7 @@ macro `case`*(n: CasedObject | CaseObject): untyped =
         newCall(bindSym"?=", branch[0], valueIdent),
         branch[1]
       )
-      caseStmt &= nnkOfBranch.newTree(branch[0][0], body)
+      caseStmt &= nnkOfBranch.newTree(newCall(bindSym"grabTag", valueIdent, ident branch[0][0].strVal), body)
     of nnkElse:
       caseStmt &= branch
     else:
