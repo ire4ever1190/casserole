@@ -18,8 +18,9 @@ func ok*[T, E](res: out Result[T, E], val: T) =
   runnableExamples:
     proc main(): Result[string, int] =
       result.ok("Hello World")
+    assert Ok(_) ?== main()
 
-  res = typeof(res).Ok(val)
+  res = Result[T, E].Ok(val)
 
 func error*[T, E](res: out Result[T, E], err: E) =
   ## Initialises an existing result with `Error` value.
@@ -27,8 +28,9 @@ func error*[T, E](res: out Result[T, E], err: E) =
   runnableExamples:
     proc main(): Result[string, int] =
       result.error(QuitFailure)
+    assert Error(_) ?== main()
 
-  res = typeof(res).Error(err)
+  res = Result[T, E].Error(err)
 
 func map*[T, R, E](res: Result[T, E], body: T -> R): Result[R, E] {.effectsOf: body.}=
   ## Performs an operation on a result (if it didn't fail) and returns that
