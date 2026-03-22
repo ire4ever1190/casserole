@@ -52,7 +52,7 @@ runnableExamples:
 ##
 ## There is also a helper library for [result type error handling](casserole/results.html)
 
-import std/[macros, strutils, sequtils, options, typetraits]
+import std/[macros, strutils, sequtils, options, typetraits, sugar]
 
 import pkg/libdump/macros
 
@@ -165,14 +165,19 @@ proc grabBranch(obj: NimNode, branch: string): NimNode =
   block:
     if decl.isSome():
       let objDecl = decl.get()
-      # We are cjeclomg if it inherits CaseObject
-      if objDecl[1].kind != nnkOfInherit:
-        break
-      if objDecl[1][0].kind != nnkBracketExpr:
-        break
-      let parentObj = objDecl[1][0]
-      if parentObj[0].eqIdent("CaseObject"):
-        return newDotExpr(parentObj[1], ident branch)
+      let match = chain(
+        ofKind({nnkObjectTy}),
+        path({
+          1: {nnkOfInherit},
+          0: {nnkBracketExpr},
+        })
+      )
+      let enumSym = decl
+        .flatMap(match)
+        .filter(parent => parent[0].eqIdent("CaseObject"))
+        .map(parent => parent[1])
+      if enumSym.isSome():
+        return newDotExpr(enumSym.get(), ident branch)
 
   # Fall back, just call grabTag
   return newCall(bindSym"grabTag", obj, ident branch)
