@@ -3,7 +3,8 @@
 [Docs](https://ire4ever1190.github.io/casserole/develop/casserole.html)
 
 Library that adds support for sum types/case objects with pattern matching. 
-Also integrates with `std/options` for easy integration with existing code.
+Main difference to other libraries is this is integrated with standard library types (and can be extended to custom types easily)
+which allows is to be used more even if other library authors don't use it.
 
 WIP so expect (and report) bugs that you encounter
 

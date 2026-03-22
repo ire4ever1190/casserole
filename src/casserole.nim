@@ -77,7 +77,12 @@ proc getTagIdent(tag: string): NimNode =
   ## Returns the identifier for a tag
   return tag.toLowerAscii().ident
 
-type PatternField = tuple[ident: NimNode, index: int]
+type
+  PatternType = enum
+    Ignored ## `_` parameter that we don't bind to anything or check value
+    Binding ## Value gets binded to a parameter
+    Value ## Value gets compared against a constant
+  PatternField = tuple[ident: NimNode, index: int]
 proc collectFields(pattern: NimNode): seq[PatternField] =
   ## Returns all the fields in a pattern.
   ## - `ident`: what identifier it should be unpacked into
@@ -139,7 +144,6 @@ macro unrollEnum*(body: ForLoopStmt): untyped =
   ## Macro that unrolls an enum and runs the loop body for each instance.
   ## This is unrolled at compile time, so each iteration gets a static version of the value.
   ## Be careful with large enums since the body is copied for each enum value
-  echo body.treeRepr
 
   if body.len != 3 or body[0].kind notin {nnkIdent, nnkSym}:
     "Expecting for loop with a single variable".error(body)
@@ -147,9 +151,36 @@ macro unrollEnum*(body: ForLoopStmt): untyped =
     "Expecting a single argument containing an enum".error(body[1])
   return newCall(bindSym"unrollEnumAux", body[1][1], newLit body[0].strVal, body[2])
 
+template grabTag(obj: CaseObject | CasedObject, name: untyped): enum =
+  ## Helper for binding a `name` to the actual enum discriminator of `obj`
+  ## Helps with symbol resolution issues
+  typeof(obj.currentBranch()).name
+
+proc grabBranch(obj: NimNode, branch: string): NimNode =
+  ## Helper macro to get around typing issues.
+  ## If there is an enum branch with same name as the type, then the object is choosen which causes type errors.
+  ## We get around this by looking up the type and returning a sym for the exact enum value
+  # See if we can lookup the type and find the exact enum
+  let decl = obj.getType().getObjectDecl()
+  block:
+    if decl.isSome():
+      let objDecl = decl.get()
+      # We are cjeclomg if it inherits CaseObject
+      if objDecl[1].kind != nnkOfInherit:
+        break
+      if objDecl[1][0].kind != nnkBracketExpr:
+        break
+      let parentObj = objDecl[1][0]
+      if parentObj[0].eqIdent("CaseObject"):
+        return newDotExpr(parentObj[1], ident branch)
+
+  # Fall back, just call grabTag
+  return newCall(bindSym"grabTag", obj, ident branch)
+
+
 template getBranch*[T: CaseObject](c: T, branch: untyped): tuple =
   ## Generic function that gets the branch value for any [CaseObject]
-  generateCases(c, branch)
+  generateCases(c, grabTag(c, branch))
 
 template currentBranch*[D; T: CaseObject[D]](c: T): D =
   ## Returns the current state that a [CaseObject] is in
@@ -173,20 +204,21 @@ template branchCheck(obj, branch: untyped) =
   ## Disabled with `-d:danger`
   when not defined(danger):
     let currentBranch = obj.currentBranch
-    if currentBranch != branch:
-      # Narrow the type to handle ambigious identifiers (e.g. Result.Ok and TestStatus.Ok)
-      let b: typeof(currentBranch) = branch
+    # Narrow the type to handle ambigious identifiers (e.g. Result.Ok and TestStatus.Ok)
+    let b: typeof(currentBranch) = branch
+
+    if currentBranch != b:
       raise (ref FieldDefect)(msg: "Trying to access " & $b & " but object is " & $currentBranch)
 
 type
   Pattern = object
-    tag: string
+    tag: string # Identifer pointing to the enum value
     fields: seq[PatternField]
 
 proc parsePattern(node: NimNode): Pattern =
   if node.kind != nnkCall or node[0].kind notin {nnkIdent, nnkSym}:
-    echo node.treeRepr
     "Expecting pattern to be in form `Branch(...)`".error(node)
+
   return Pattern(tag: node[0].strVal, fields: node.collectFields())
 
 macro `?=`*(lhs: untyped, rhs: CaseObject | CasedObject): untyped =
@@ -201,7 +233,6 @@ macro `?=`*(lhs: untyped, rhs: CaseObject | CasedObject): untyped =
     assert val == opt.get()
 
   result = nnkLetSection.newTree()
-
   let
     pattern = lhs.parsePattern()
     branch = getBranch(rhs, ident pattern.tag)
@@ -211,7 +242,7 @@ macro `?=`*(lhs: untyped, rhs: CaseObject | CasedObject): untyped =
 
   # We still need to add a check so field defects are thrown for bad branches
   result = newStmtList(
-    newCall(bindSym"branchCheck", rhs, ident pattern.tag),
+    newCall(bindSym"branchCheck", rhs, rhs.grabBranch(pattern.tag)),
     result
   )
 
@@ -250,16 +281,21 @@ macro `?==`*(lhs: untyped, rhs: CaseObject | CasedObject): bool =
   # Finally, let the user know if its safe to use the values
   result &= rightBranch
 
-macro `.()`*(obj: untyped, tag: untyped, values: varargs[untyped]): untyped =
+proc getBranchEnum[T: CasedObject](c: typedesc[T], e: enum): enum =
+  typeof(c).D.e
+
+macro `.()`*(obj: typedesc, tag: untyped, values: varargs[untyped]): untyped =
   ## This is used for constructor a cased object.
   ## Construction is done in the form `Object.Tag(params...)`
   # TODO: Support named field construction
   let tupleConstr = nnkTupleConstr.newTree()
   for value in values:
     tupleConstr &= value
-  nnkObjConstr.newTree(
+  # TODO: Get a generic way
+
+  result = nnkObjConstr.newTree(
     obj,
-    newColonExpr(ident"kind", tag),
+    newColonExpr(ident"kind", grabBranch(obj, tag.strVal)),
     newColonExpr(tag.strVal.getTagIdent(), tupleConstr)
   )
 
@@ -354,7 +390,6 @@ macro cased*(inp: untyped): untyped =
     enumDecl,
     nnkTypeDef.newTree(inp[0], inp[1], newObjectDecl)
   )
-  echo result.toStrLit
 
 macro `case`*(n: CasedObject | CaseObject): untyped =
   ## Macro that adds support for pattern matching via case statement/expression.
