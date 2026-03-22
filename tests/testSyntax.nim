@@ -5,7 +5,7 @@
 #
 # To run these tests, simply execute `nimble test`.
 
-import std/[unittest, options, macros, json]
+import std/[unittest, options, macros, json, setutils]
 
 import casserole
 import casserole/nimNodeSupport
@@ -129,3 +129,22 @@ suite "Wrapping JsonNode":
 import ./auxOtherFile
 test "Can import another type":
   check A(_) ?== SomeType.A(9)
+
+suite "Comparison":
+  test "Same branch and values are equal":
+    check SomeType.A(9) == SomeType.A(9)
+  test "Same branch and different values are not equal":
+    check SomeType.A(1) != SomeType.A(2)
+  test "Different branch are not equal":
+    check SomeType.A(1) != SomeType.B("Hello")
+
+test "Enum unrolling":
+  type
+    E = enum
+      A
+      B
+      C
+  var items: set[E]
+  for item in unrollEnum(E):
+    items.incl(item)
+  check items == fullSet(E)

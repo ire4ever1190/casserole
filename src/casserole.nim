@@ -120,6 +120,33 @@ macro generateCases[D](c: CaseObject[D], discrimValue: D): untyped =
     )
   )
 
+macro unrollEnumAux(e: typedesc[enum], itemIdent: static[string], body: untyped) =
+  ## Auxillery macro that performs the unrolling.
+  ## Needed so we can get type info
+
+  # If we just copied the body then each `item` would just be set to the first value.
+  # Instead we make the body a template and call that for each enum value, this way the compiler
+  # handles reassigning everything
+  let templateIdent = nskTemplate.genSym("iterBody")
+  result = newStmtList(
+    newProc(templateIdent, [newEmptyNode(), newIdentDefs(ident itemIdent, e)], body = body, procType = nnkTemplateDef),
+  )
+  let decl = e.getObjectDecl().get()
+  for item in decl[1 .. ^1]:
+    result &= newBlockStmt(newCall(templateIdent, item))
+
+macro unrollEnum*(body: ForLoopStmt): untyped =
+  ## Macro that unrolls an enum and runs the loop body for each instance.
+  ## This is unrolled at compile time, so each iteration gets a static version of the value.
+  ## Be careful with large enums since the body is copied for each enum value
+  echo body.treeRepr
+
+  if body.len != 3 or body[0].kind notin {nnkIdent, nnkSym}:
+    "Expecting for loop with a single variable".error(body)
+  if body[1].len != 2:
+    "Expecting a single argument containing an enum".error(body[1])
+  return newCall(bindSym"unrollEnumAux", body[1][1], newLit body[0].strVal, body[2])
+
 template getBranch*[T: CaseObject](c: T, branch: untyped): tuple =
   ## Generic function that gets the branch value for any [CaseObject]
   generateCases(c, branch)
@@ -127,6 +154,19 @@ template getBranch*[T: CaseObject](c: T, branch: untyped): tuple =
 template currentBranch*[D; T: CaseObject[D]](c: T): D =
   ## Returns the current state that a [CaseObject] is in
   c.kind
+
+proc `==`*[T: CaseObject](left, right: T): bool =
+  ## Compares two [CaseObject] and considers them equal if they
+  ## have the same branch and values
+  # Inital branch check
+  if left.currentBranch() != right.currentBranch():
+    return false
+
+  # Now we can safely compare fields
+  # TODO: Optimised version that generates a case statement so we don't check every field
+  for branch in unrollEnum(typeof(left.currentBranch())):
+    if left.currentBranch() == branch:
+      return left.getBranch(branch) == right.getBranch(branch)
 
 template branchCheck(obj, branch: untyped) =
   ## Inserts a branch check that raises a `FieldDefect` when accessing invalid branches.
