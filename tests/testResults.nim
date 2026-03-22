@@ -5,7 +5,8 @@ import std/unittest
 
 type SimpleError[T] = Result[T, string]
 
-type Error = int
+type Error = object
+  msg: string
 
 test "Can return ok value":
   proc hello(): SimpleError[int] =
@@ -27,3 +28,8 @@ suite "Symbol binding": # TODO: Move these tests somewhere more generic
               of Error(val): val
               of Ok(_): "Was fine?"
     check idk == "Bad"
+
+  test "Can create object":
+    let err = Result[int, Error].Error(Error(msg: "Hello"))
+    Error(val) ?= err
+    check val == Error(msg: "Hello")

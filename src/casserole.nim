@@ -267,9 +267,11 @@ macro `?==`*(lhs: untyped, rhs: CaseObject | CasedObject): bool =
   let
     pattern = lhs.parsePattern()
     branch = getBranch(rhs, ident pattern.tag)
-    rightBranch = newCall(ident"==", getCurrentBranch(rhs), ident pattern.tag)
+    rightBranch = nskLet.genSym("rightBranch")
 
-  result = newStmtList()
+  result = newStmtList(
+    newLetStmt(rightBranch, newCall(ident"==", getCurrentBranch(rhs), ident pattern.tag))
+  )
 
   # First we need to generate all the variables these will get unpacked into.
   # Probs has performance issues since we are creating values even for wrong branch, but oh well
