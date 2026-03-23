@@ -151,12 +151,7 @@ macro unrollEnum*(body: ForLoopStmt): untyped =
     "Expecting a single argument containing an enum".error(body[1])
   return newCall(bindSym"unrollEnumAux", body[1][1], newLit body[0].strVal, body[2])
 
-template grabTag(obj: CaseObject | CasedObject, name: untyped): enum =
-  ## Helper for binding a `name` to the actual enum discriminator of `obj`
-  ## Helps with symbol resolution issues
-  typeof(obj.currentBranch()).name
-
-proc grabBranch(obj: NimNode, branch: string): NimNode =
+macro grabBranch(obj: CaseObject | CasedObject, branch: typed): enum =
   ## Helper macro to get around typing issues.
   ## If there is an enum branch with same name as the type, then the object is choosen which causes type errors.
   ## We get around this by looking up the type and returning a sym for the exact enum value
@@ -177,11 +172,16 @@ proc grabBranch(obj: NimNode, branch: string): NimNode =
         .filter(parent => parent[0].eqIdent("CaseObject"))
         .map(parent => parent[1])
       if enumSym.isSome():
-        return newDotExpr(enumSym.get(), ident branch)
+        let branch = if branch.kind == nnkStmtListExpr: branch[^1] else: branch
+        return newDotExpr(enumSym.get(), branch)
 
-  # Fall back, just call grabTag
-  return newCall(bindSym"grabTag", obj, ident branch)
+  # Fall back, just get the enum value and access branch from that
+  return newCall(bindSym"typeof", newCall(ident"currentBranch", obj)).newDotExpr(branch)
 
+template grabTag(obj: CaseObject | CasedObject, name: untyped): enum =
+  ## Helper for binding a `name` to the actual enum discriminator of `obj`
+  ## Helps with symbol resolution issues
+  grabBranch(obj, name)
 
 template getBranch*[T: CaseObject](c: T, branch: untyped): tuple =
   ## Generic function that gets the branch value for any [CaseObject]
@@ -221,12 +221,16 @@ type
     fields: seq[PatternField]
 
 proc parsePattern(node: NimNode): Pattern =
+  if node.kind == nnkIdent:
+    # Just the tag, don't care about fields
+    return Pattern(tag: node.strVal)
+
   if node.kind != nnkCall or node[0].kind notin {nnkIdent, nnkSym}:
     "Expecting pattern to be in form `Branch(...)`".error(node)
 
   return Pattern(tag: node[0].strVal, fields: node.collectFields())
 
-macro `?=`*(lhs: untyped, rhs: CaseObject | CasedObject): untyped =
+macro `?=`*(lhs: untyped, rhs: untyped): untyped =
   ## Unpacks a cased object into an expected type.
   ## Raises a field defect if its the wrong type
   runnableExamples:
@@ -240,18 +244,19 @@ macro `?=`*(lhs: untyped, rhs: CaseObject | CasedObject): untyped =
   result = nnkLetSection.newTree()
   let
     pattern = lhs.parsePattern()
-    branch = getBranch(rhs, ident pattern.tag)
+    tag = newCall(bindSym"grabTag", rhs, ident pattern.tag)
+    branch = getBranch(rhs, tag)
 
   for (ident, idx) in pattern.fields:
     result &= newIdentDefs(ident, newEmptyNode(), newBracketExpr(branch, newLit idx))
 
   # We still need to add a check so field defects are thrown for bad branches
   result = newStmtList(
-    newCall(bindSym"branchCheck", rhs, rhs.grabBranch(pattern.tag)),
+    newCall(bindSym"branchCheck", rhs, tag),
     result
   )
 
-macro `?==`*(lhs: untyped, rhs: CaseObject | CasedObject): bool =
+macro `?==`*(lhs: untyped, rhs: untyped): bool =
   ## Like [?=] except doesn't raise an error. This is meant
   ## to be used inside `if` statements for unpacking a value.
   ## Variables will still be added to scope for wrong branch, but won't be initialised
@@ -275,13 +280,13 @@ macro `?==`*(lhs: untyped, rhs: CaseObject | CasedObject): bool =
 
   # First we need to generate all the variables these will get unpacked into.
   # Probs has performance issues since we are creating values even for wrong branch, but oh well
-  for (ident, idx) in pattern.fields:
-    result &= newVarStmt(ident, newCall("default", newCall("typeof", nnkBracketExpr.newTree(branch, newLit idx))))
-
-  # Now if its the right branch, we can perform the unpacking
   let unpackBranch = newStmtList()
   for (ident, idx) in pattern.fields:
-    unpackBranch &= newAssignment(ident, nnkBracketExpr.newTree(branch, newLit idx))
+    # Get a new name, helps with making sure it binds
+    let name = ident ident.strVal
+    result &= newVarStmt(name, newCall("default", newCall("typeof", nnkBracketExpr.newTree(branch, newLit idx))))
+    # Also add the corresponding call to set the variable if its the right branch
+    unpackBranch &= newAssignment(name, newBracketExpr(branch, newLit idx))
 
   result &= nnkIfStmt.newTree(nnkElifBranch.newTree(rightBranch, unpackBranch))
 
@@ -302,7 +307,7 @@ macro `.()`*(obj: typedesc, tag: untyped, values: varargs[untyped]): untyped =
 
   result = nnkObjConstr.newTree(
     obj,
-    newColonExpr(ident"kind", grabBranch(obj, tag.strVal)),
+    newColonExpr(ident"kind", newCall(bindSym"grabTag", obj, ident tag.strVal)),
     newColonExpr(tag.strVal.getTagIdent(), tupleConstr)
   )
 
