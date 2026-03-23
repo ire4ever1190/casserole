@@ -6,7 +6,26 @@ on:
   workflow_dispatch:
 
 jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        nim: ["2.2.4", "stable", "devel"]
+
+    name: Test Nim ${{ matrix.nim}}
+    steps:
+      - uses: iffy/install-nim@v5
+        with:
+          version: ${{ matrix.nim }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: "Run Tests"
+        run: nimble test
+
   deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main'
     permissions:
       pages: write # To deploy to Pages
       id-token: write # Verify deployment
