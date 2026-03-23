@@ -1,7 +1,8 @@
+## .. importdoc:: casserole/results.nim
 ## This library supports making sum types without needing a separate enum with like variants.
 ## This gives support for having fields with the same name along with safe unpacking of values.
 ##
-## For example, we could construct an `Result` type like so
+## For example, we could construct an `Result` type like so (Though we already have this in the library [Result])
 runnableExamples:
   import casserole
   import std/random
