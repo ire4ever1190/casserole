@@ -157,6 +157,7 @@ macro grabBranch(obj: CaseObject | CasedObject, branch: typed): enum =
   ## We get around this by looking up the type and returning a sym for the exact enum value
   # See if we can lookup the type and find the exact enum
   let decl = obj.getType().getObjectDecl()
+  let branch = if branch.kind == nnkStrLit: ident branch.strVal else: branch
   block:
     if decl.isSome():
       let objDecl = decl.get()
@@ -172,13 +173,13 @@ macro grabBranch(obj: CaseObject | CasedObject, branch: typed): enum =
         .filter(parent => parent[0].eqIdent("CaseObject"))
         .map(parent => parent[1])
       if enumSym.isSome():
-        let branch = if branch.kind == nnkStmtListExpr: branch[^1] else: branch
+        let branch = repeat(ofKind({nnkStmtListExpr}).chain(idx(^1)))(branch).get()
         return newDotExpr(enumSym.get(), branch)
 
   # Fall back, just get the enum value and access branch from that
   return newCall(bindSym"typeof", newCall(ident"currentBranch", obj)).newDotExpr(branch)
 
-template grabTag(obj: CaseObject | CasedObject, name: untyped): enum =
+template grabTag(obj: untyped, name: untyped): enum =
   ## Helper for binding a `name` to the actual enum discriminator of `obj`
   ## Helps with symbol resolution issues
   grabBranch(obj, name)
@@ -244,7 +245,7 @@ macro `?=`*(lhs: untyped, rhs: untyped): untyped =
   result = nnkLetSection.newTree()
   let
     pattern = lhs.parsePattern()
-    tag = newCall(bindSym"grabTag", rhs, ident pattern.tag)
+    tag = newCall(bindSym"grabTag", rhs, newLit pattern.tag)
     branch = getBranch(rhs, tag)
 
   for (ident, idx) in pattern.fields:
@@ -416,10 +417,13 @@ macro `case`*(n: CasedObject | CaseObject): untyped =
   result = newStmtList()
 
   # We store the passed in object so it doesn't get reevaulated multiple times
-  let valueIdent = nskLet.genSym"value"
+  let
+    valueIdent = nskLet.genSym"value"
+    currentBranchIdent = nskLet.genSym"branch"
   result &= newLetStmt(valueIdent, n[0])
+  result &= newLetStmt(currentBranchIdent, getCurrentBranch(valueIdent))
 
-  let caseStmt = nnkCaseStmt.newTree(getCurrentBranch(valueIdent))
+  let caseStmt = nnkCaseStmt.newTree(currentBranchIdent)
   for branch in n[1 .. ^1]:
     case branch.kind
     of nnkOfBranch:
@@ -427,12 +431,17 @@ macro `case`*(n: CasedObject | CaseObject): untyped =
         newCall(bindSym"?=", branch[0], valueIdent),
         branch[1]
       )
-      caseStmt &= nnkOfBranch.newTree(newCall(bindSym"grabTag", valueIdent, ident branch[0][0].strVal), body)
+      # We need to bind the tag in the generated case or else we get collision problems
+      let
+        userBranch = branch[0][0]
+        branchTag = newCall(bindSym"typeof", currentBranchIdent).newDotExpr(ident branch[0][0].strVal)
+      caseStmt &= nnkOfBranch.newTree(branchTag, body)
     of nnkElse:
       caseStmt &= branch
     else:
       "Unexpected node".error(branch)
   result &= caseStmt
+  echo result.toStrLit
 
 # Extra modules to import so they are included in the docs
 import casserole/results
