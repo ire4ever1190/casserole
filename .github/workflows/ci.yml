@@ -15,9 +15,11 @@ jobs:
 
     name: Test Nim ${{ matrix.nim}}
     steps:
+      - uses: actions/checkout@v4
+
       - uses: iffy/install-nim@v5
         with:
-          version: ${{ matrix.nim }}
+          version: choosenim:${{ matrix.nim }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
