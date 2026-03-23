@@ -53,6 +53,11 @@ suite "Unpacking":
                 else: "Nothing"
     check value == "hello"
 
+  test "Case statements can drop paranthesis":
+    case some(9)
+    of None: discard # Not needed since there are no fields
+    of Some(_): discard # Needed because it has a field
+
   test "Case statements can be exhaustive":
     # The test is if this compiles
     let value = case noValue
@@ -99,7 +104,7 @@ suite "Wrapping Option":
 
   test "Case statements work":
     let v = case noneVal
-            of None(): "Got nothing"
+            of None: "Got nothing"
             of Some(v): v
     check v == "Got nothing"
 

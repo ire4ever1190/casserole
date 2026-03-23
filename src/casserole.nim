@@ -434,8 +434,8 @@ macro `case`*(n: CasedObject | CaseObject): untyped =
       )
       # We need to bind the tag in the generated case or else we get collision problems
       let
-        userBranch = branch[0][0]
-        branchTag = newCall(bindSym"typeof", currentBranchIdent).newDotExpr(ident branch[0][0].strVal)
+        userBranch = branch[0].parsePattern().tag
+        branchTag = newCall(bindSym"typeof", currentBranchIdent).newDotExpr(ident userBranch)
       caseStmt &= nnkOfBranch.newTree(branchTag, body)
     of nnkElse:
       caseStmt &= branch
