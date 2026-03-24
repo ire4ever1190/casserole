@@ -1,46 +1,24 @@
 # Casserole 
 
-[Docs](https://ire4ever1190.github.io/casserole/develop/casserole.html)
+[Docs with examples](https://ire4ever1190.github.io/casserole/develop/casserole.html)
+
+### Overview
 
 Library that adds support for sum types/case objects with pattern matching. 
-Main difference to other libraries is this is integrated with standard library types (and can be extended to custom types easily)
-which allows is to be used more even if other library authors don't use it.
 
-WIP so expect (and report) bugs that you encounter
+Features
+- Sum types
+- Pattern matching
+- Pattern matching for `std/options`, `std/macros`, and `std/json`
 
-## Example
+### Example
 
 ```nim
-import casserole
-import std/random
+import pkg/casserole
+import std/options
 
-type
-  Result*[T, E] {.cased.} = object
-    case
-    of Ok:
-      value: T
-    of Error: 
-      error: E
+let val = some("foo")
 
-# Looks like any other type
-proc possiblyFails(): Result[int, string] =
-  if sample([true, false]):
-    # Constructed by referencing the type and the branch
-    Result[int, string].Ok(rand(100))
-  else:
-    Result[int, string].Error("Failed for some reason =(")
-
-let res = possiblyFails()
-
-# Can extract via pattern matching with `if`/`case` statements
-if Ok(randVal) ?== res:
-  echo "We got: " & $randVal
-  
-# Case statements check for exhaustiveness
-case res
-of Ok(randVal):
-  echo "Was something"
-of Error(error):
-  echo "It failed"
-  
+if Some(x) ?== val:
+  echo x
 ```

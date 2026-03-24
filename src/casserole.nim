@@ -1,6 +1,8 @@
 ## .. importdoc:: casserole/results.nim
-## This library supports making sum types without needing a separate enum with like variants.
-## This gives support for having fields with the same name along with safe unpacking of values.
+## This library supports making sum types without needing a separate enum like with object variants which gives multiple benefits of
+## - Being able to reuse field names
+## - Safely unpacking fields
+## - Pattern matching for quick comparisons
 ##
 ## ## Getting Started
 ##
@@ -30,6 +32,7 @@ multiBlock gettingStarted:
     isInt = IntOrString.Int(9)
     isString = IntOrString.String("Hello")
 
+##
 ## ### Pattern Matching
 ##
 ## To safely use these values, you use pattern matching via [?=], [?==], and [`case`].
@@ -37,9 +40,9 @@ multiBlock gettingStarted:
 ## - `_`: This matches anything, also doesn't put a variable into scope
 ## - `foo`: This matches anything, but also puts a variable `foo` into scope with that value
 ## - `"someValue"`: This matches the exact value `"someValue"` (could be any expression), doesn't put anything into scope
+##
 multiBlock gettingStarted:
-  # Be very careful with `?=`, it throws a defect if you're wrong
-  Int(_) ?= isInt
+  Int(_) ?= isInt # Be very careful with `?=`, it throws a defect if you're wrong
 
   # `?==` is safer since it only runs the if statement if it matched the pattern
   if Int(val) ?== isString:
@@ -54,7 +57,26 @@ multiBlock gettingStarted:
 checkMultiBlock(gettingStarted)
 
 ##
+## ### Supporting existing types
+##
+## A feature of this library is being able to support existing types. For example, you can use `std/options` with pattern matching
+runnableExamples:
+  import std/options
+
+  let val = some("Hello")
+
+  if Some(value) ?== val:
+    echo value
+
+##
+## The following standard library modules are supported
+## - [Options](casserole/optionSupport.html)
+## - [Macros](casserole/nimNodeSupport.html)
+## - [JsonNodes](casserole/jsonNodeSupport.html)
+
+##
 ## ## Examples
+##
 ## For example, we could construct an `Result` type like so (Though we already have this in the library [Result])
 runnableExamples:
   import casserole
@@ -90,21 +112,6 @@ runnableExamples:
     echo "Was something"
   of Error(error):
     echo "It failed"
-## I could show you how to make an `Option[T]` type but that would be redundant since this library supports `std/options`!
-## This is documented in [optionSupport](casserole/optionSupport.html) and a similar pattern can be follow to support other types
-runnableExamples:
-  import std/options
-
-  let val = some("Hello")
-
-  if Some(value) ?== val:
-    echo value
-## This is used to support multiple types from the Nim standard library
-## - [Options](casserole/optionSupport.html)
-## - [Macros](casserole/nimNodeSupport.html)
-## - [JsonNodes](casserole/jsonNodeSupport.html)
-##
-## There is also a helper library for [result type error handling](casserole/results.html)
 
 import std/[macros, strutils, sequtils, options, typetraits, sugar, tables]
 
