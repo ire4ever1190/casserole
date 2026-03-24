@@ -2,6 +2,59 @@
 ## This library supports making sum types without needing a separate enum with like variants.
 ## This gives support for having fields with the same name along with safe unpacking of values.
 ##
+## ## Getting Started
+##
+## Types are created via the [cased] macro which supports both creating sum types from object declarations along with a shorthand for single field sumtypes
+import libdump/docs
+const gettingStarted = initExampleBlock("start", "")
+
+multiBlock gettingStarted:
+  import casserole
+
+  type
+    IntOrString {.cased.} = object
+      case
+      of Int:
+        val: int
+      of String:
+        # Notice that field names can be shared
+        val: string
+    # Short hand syntax if you just need a single anonymous field
+    IntOrStringShort {.cased.} = tuple
+      Int: int
+      String: string
+
+## You can then construct these objects using `Object.Tag(fields...)` syntax. (See [`.()`] for more details)
+multiBlock gettingStarted:
+  let
+    isInt = IntOrString.Int(9)
+    isString = IntOrString.String("Hello")
+
+## ### Pattern Matching
+##
+## To safely use these values, you use pattern matching via [?=], [?==], and [`case`].
+## Patterns are in the form `Tag(field, ...)` where `Tag` is the discriminator and field forms a pattern e.g.
+## - `_`: This matches anything, also doesn't put a variable into scope
+## - `foo`: This matches anything, but also puts a variable `foo` into scope with that value
+## - `"someValue"`: This matches the exact value `"someValue"` (could be any expression), doesn't put anything into scope
+multiBlock gettingStarted:
+  # Be very careful with `?=`, it throws a defect if you're wrong
+  Int(_) ?= isInt
+
+  # `?==` is safer since it only runs the if statement if it matched the pattern
+  if Int(val) ?== isString:
+    echo "It was an integer and it was: ", $val # this will never run tho...
+
+  # Case statements are handy if you have lots of patterns
+  case isInt
+  of Int(1): echo "The value was 1"
+  of String(x): echo "It was ", x
+  of Int(_): echo "Was some other number" # You can have multiple patterns, placement gives precedence
+
+checkMultiBlock(gettingStarted)
+
+##
+## ## Examples
 ## For example, we could construct an `Result` type like so (Though we already have this in the library [Result])
 runnableExamples:
   import casserole
