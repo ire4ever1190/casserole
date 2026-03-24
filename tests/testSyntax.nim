@@ -85,10 +85,12 @@ suite "Unpacking":
     check case someValue
           of Left("hello"): true
           of Right(_): false
+          else: false
 
   test "Can compare multiple values":
     check case someValue
           of Left("not hello"): false
+          of Left(_): true
           of Left(_): true
           of Right(_): false
 

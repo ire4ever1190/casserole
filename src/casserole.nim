@@ -289,7 +289,6 @@ macro `?=`*(lhs: untyped, rhs: untyped): untyped =
     valueChecks,
     result
   )
-  echo result.treeRepr
 
 macro `?==`*(lhs: untyped, rhs: untyped): bool =
   ## Like [?=] except doesn't raise an error. This is meant
@@ -471,7 +470,7 @@ macro `case`*(n: CasedObject | CaseObject): untyped =
   result &= newLetStmt(currentBranchIdent, getCurrentBranch(valueIdent))
 
   var
-    branches = initTable[string, seq[tuple[pat: Pattern, body: NimNode]]]() # label -> branches
+    branches = initTable[string, seq[tuple[pat: Pattern, patNode, body: NimNode]]]() # label -> branches
     elseBranch = newEmptyNode()
   # Each `of` branch gets converted into an if statement.
   # We still have a case statement to jump to the kind, so not every if statement is ran.
@@ -479,9 +478,11 @@ macro `case`*(n: CasedObject | CaseObject): untyped =
   for branch in n[1 .. ^1]:
     case branch.kind
     of nnkOfBranch:
-      let userBranch = branch[0].parsePattern().tag
+      let
+        pattern = branch[0].parsePattern()
+        userBranch = pattern.tag
       discard branches.hasKeyOrPut(userBranch, @[])
-      branches[userBranch] &= branch
+      branches[userBranch] &= (pattern, branch[0], branch[1])
     of nnkElse:
       elseBranch = branch
     else:
@@ -490,14 +491,34 @@ macro `case`*(n: CasedObject | CaseObject): untyped =
   # Now build up the case statement
   let caseStmt = nnkCaseStmt.newTree(currentBranchIdent)
   for tag, branches in branches:
-    let checks = nnkIfStmt.newTree()
-    for branch in branches:
-      checks &= nnkElifBranch.newTree(
-        newCall(bindSym"?==", branch[0], valueIdent),
-        branch[1]
-      )
-    if elseBranch.kind != nnkEmpty:
+    var
+      checks = nnkIfStmt.newTree()
+      elseBranch = elseBranch # By default, we just copy the else branch
+    var hasFullMatch = false
+    for (pat, patNode, body) in branches:
+      if pat.fullBinding:
+        let unpacking = newStmtList(
+          newCall(bindSym"?=", patNode, valueIdent),
+          body
+        )
+        hasFullMatch = true
+        if checks.len == 0:
+          # First node, just unpack directly
+          checks = unpacking
+        else:
+          # We skip everything after this, so just add it as the else branch (helps with expressions)
+          checks &= nnkElse.newTree(unpacking)
+      elif hasFullMatch: # We are after a full match, don't even add the code
+        "Branch will never match, less precise pattern precedes this".warning(patNode)
+      else:
+        checks &= nnkElifBranch.newTree(
+          newCall(bindSym"?==", patNode, valueIdent),
+          body
+        )
+
+    if elseBranch.kind != nnkEmpty and not hasFullMatch:
       checks &= elseBranch
+
     caseStmt &= nnkOfBranch.newTree(
       newCall(bindSym"typeof", currentBranchIdent).newDotExpr(ident tag),
       checks
@@ -505,7 +526,6 @@ macro `case`*(n: CasedObject | CaseObject): untyped =
   if elseBranch.kind != nnkEmpty:
     caseStmt &= elseBranch
   result &= caseStmt
-  echo result.toStrLit
 
 # Extra modules to import so they are included in the docs
 import casserole/results
