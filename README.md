@@ -1,4 +1,4 @@
-# Casserole 
+# Casserole 🍲
 
 [Docs with examples](https://ire4ever1190.github.io/casserole/develop/casserole.html)
 
