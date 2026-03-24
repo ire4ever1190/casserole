@@ -1,6 +1,81 @@
 ## .. importdoc:: casserole/results.nim
-## This library supports making sum types without needing a separate enum with like variants.
-## This gives support for having fields with the same name along with safe unpacking of values.
+## This library supports making sum types without needing a separate enum like with object variants which gives multiple benefits of
+## - Being able to reuse field names
+## - Safely unpacking fields
+## - Pattern matching for quick comparisons
+##
+## ## Getting Started
+##
+## Types are created via the [cased] macro which supports both creating sum types from object declarations along with a shorthand for single field sumtypes
+import libdump/docs
+const gettingStarted = initExampleBlock("start", "")
+
+multiBlock gettingStarted:
+  import casserole
+
+  type
+    IntOrString {.cased.} = object
+      case
+      of Int:
+        val: int
+      of String:
+        # Notice that field names can be shared
+        val: string
+    # Short hand syntax if you just need a single anonymous field
+    IntOrStringShort {.cased.} = tuple
+      Int: int
+      String: string
+
+## You can then construct these objects using `Object.Tag(fields...)` syntax. (See [`.()`] for more details)
+multiBlock gettingStarted:
+  let
+    isInt = IntOrString.Int(9)
+    isString = IntOrString.String("Hello")
+
+##
+## ### Pattern Matching
+##
+## To safely use these values, you use pattern matching via [?=], [?==], and [`case`].
+## Patterns are in the form `Tag(field, ...)` where `Tag` is the discriminator and field forms a pattern e.g.
+## - `_`: This matches anything, also doesn't put a variable into scope
+## - `foo`: This matches anything, but also puts a variable `foo` into scope with that value
+## - `"someValue"`: This matches the exact value `"someValue"` (could be any expression), doesn't put anything into scope
+##
+multiBlock gettingStarted:
+  Int(_) ?= isInt # Be very careful with `?=`, it throws a defect if you're wrong
+
+  # `?==` is safer since it only runs the if statement if it matched the pattern
+  if Int(val) ?== isString:
+    echo "It was an integer and it was: ", $val # this will never run tho...
+
+  # Case statements are handy if you have lots of patterns
+  case isInt
+  of Int(1): echo "The value was 1"
+  of String(x): echo "It was ", x
+  of Int(_): echo "Was some other number" # You can have multiple patterns, placement gives precedence
+
+checkMultiBlock(gettingStarted)
+
+##
+## ### Supporting existing types
+##
+## A feature of this library is being able to support existing types. For example, you can use `std/options` with pattern matching
+runnableExamples:
+  import std/options
+
+  let val = some("Hello")
+
+  if Some(value) ?== val:
+    echo value
+
+##
+## The following standard library modules are supported
+## - [Options](casserole/optionSupport.html)
+## - [Macros](casserole/nimNodeSupport.html)
+## - [JsonNodes](casserole/jsonNodeSupport.html)
+
+##
+## ## Examples
 ##
 ## For example, we could construct an `Result` type like so (Though we already have this in the library [Result])
 runnableExamples:
@@ -37,23 +112,8 @@ runnableExamples:
     echo "Was something"
   of Error(error):
     echo "It failed"
-## I could show you how to make an `Option[T]` type but that would be redundant since this library supports `std/options`!
-## This is documented in [optionSupport](casserole/optionSupport.html) and a similar pattern can be follow to support other types
-runnableExamples:
-  import std/options
 
-  let val = some("Hello")
-
-  if Some(value) ?== val:
-    echo value
-## This is used to support multiple types from the Nim standard library
-## - [Options](casserole/optionSupport.html)
-## - [Macros](casserole/nimNodeSupport.html)
-## - [JsonNodes](casserole/jsonNodeSupport.html)
-##
-## There is also a helper library for [result type error handling](casserole/results.html)
-
-import std/[macros, strutils, sequtils, options, typetraits, sugar]
+import std/[macros, strutils, sequtils, options, typetraits, sugar, tables]
 
 import pkg/libdump/macros
 
@@ -83,15 +143,30 @@ type
     Ignored ## `_` parameter that we don't bind to anything or check value
     Binding ## Value gets binded to a parameter
     Value ## Value gets compared against a constant
-  PatternField = tuple[ident: NimNode, index: int]
+  PatternField = object
+    idx: int ## Field index getting unpacked
+    case kind: PatternType
+    of Ignored: discard
+    of Binding: ident: NimNode
+    of Value: value: NimNode
+
 proc collectFields(pattern: NimNode): seq[PatternField] =
   ## Returns all the fields in a pattern.
   ## - `ident`: what identifier it should be unpacked into
   ## - `index`: Index into the tuple of the branch this field belongs to
 
   for i in 1 ..< pattern.len:
-    if not pattern[i].eqIdent("_"): # Don't generate for _
-      result &= (pattern[i], i - 1)
+    let
+      idx = i - 1
+      field = pattern[i]
+    case field.kind
+    of nnkIdent, nnkSym:
+      if field.eqIdent("_"):
+        result &= PatternField(idx: idx, kind: Ignored)
+      else:
+        result &= PatternField(idx: idx, kind: Binding, ident: field)
+    else:
+      result &= PatternField(idx: idx, kind: Value, value: field)
 
 proc getBranch(pattern, branch: NimNode): NimNode =
   ## Returns a call that retrives the branch value for an object
@@ -217,10 +292,16 @@ template branchCheck(obj, branch: untyped) =
     if currentBranch != b:
       raise (ref FieldDefect)(msg: "Trying to access " & $b & " but object is " & $currentBranch)
 
+
 type
   Pattern = object
     tag: string # Identifer pointing to the enum value
     fields: seq[PatternField]
+
+func fullBinding(pat: Pattern): bool =
+  ## Checks if a pattern can fully bind i.e. is only made of variables, doesn't check any values
+  pat.fields.allIt(it.kind in {Ignored, Binding})
+
 
 proc parsePattern(node: NimNode): Pattern =
   if node.kind == nnkIdent:
@@ -231,6 +312,10 @@ proc parsePattern(node: NimNode): Pattern =
     "Expecting pattern to be in form `Branch(...)`".error(node)
 
   return Pattern(tag: node[0].strVal, fields: node.collectFields())
+
+template checkFieldValue(field, value: untyped) =
+  if field != value:
+    raise (ref FieldDefect)(msg: $field & " doesn't match expected" & $value)
 
 macro `?=`*(lhs: untyped, rhs: untyped): untyped =
   ## Unpacks a cased object into an expected type.
@@ -248,13 +333,20 @@ macro `?=`*(lhs: untyped, rhs: untyped): untyped =
     pattern = lhs.parsePattern()
     tag = newCall(bindSym"grabTag", rhs, newLit pattern.tag)
     branch = getBranch(rhs, tag)
+    valueChecks = newStmtList()
 
-  for (ident, idx) in pattern.fields:
-    result &= newIdentDefs(ident, newEmptyNode(), newBracketExpr(branch, newLit idx))
-
+  for pat in pattern.fields:
+    let fieldVal = newBracketExpr(branch, newLit pat.idx)
+    case pat.kind
+    of Binding:
+      result &= newIdentDefs(pat.ident, newEmptyNode(), fieldVal)
+    of Value:
+      valueChecks &= newCall(bindSym"checkFieldValue", fieldVal, pat.value)
+    of Ignored: discard
   # We still need to add a check so field defects are thrown for bad branches
   result = newStmtList(
     newCall(bindSym"branchCheck", rhs, tag),
+    valueChecks,
     result
   )
 
@@ -276,24 +368,37 @@ macro `?==`*(lhs: untyped, rhs: untyped): bool =
     branch = getBranch(rhs, ident pattern.tag)
     rightBranch = nskLet.genSym("rightBranch")
 
-  result = newStmtList(
-    newLetStmt(rightBranch, newCall(ident"==", getCurrentBranch(rhs), ident pattern.tag))
-  )
-
   # First we need to generate all the variables these will get unpacked into.
-  # Probs has performance issues since we are creating values even for wrong branch, but oh well
-  let unpackBranch = newStmtList()
-  for (ident, idx) in pattern.fields:
-    # Get a new name, helps with making sure it binds
-    let name = ident ident.strVal
-    result &= newVarStmt(name, newCall("default", newCall("typeof", nnkBracketExpr.newTree(branch, newLit idx))))
-    # Also add the corresponding call to set the variable if its the right branch
-    unpackBranch &= newAssignment(name, newBracketExpr(branch, newLit idx))
+  # Looking at godbolt, codegen is exactly the same as unpacking an option (for option unpacking atleast)
+  let
+    unpackBranch = newStmtList()
+    variableDecls = newStmtList()
+  # Add `and` statements to grow the branch check
+  var branchCheck = newLit true # compiler will optimise this surely
 
-  result &= nnkIfStmt.newTree(nnkElifBranch.newTree(rightBranch, unpackBranch))
+  for pat in pattern.fields:
+    let
+      fieldVal = newBracketExpr(branch, newLit pat.idx)
 
-  # Finally, let the user know if its safe to use the values
-  result &= rightBranch
+    case pat.kind
+    of Ignored: discard
+    of Value:
+      branchCheck = newCall(ident"and", branchCheck, newCall(ident"==", fieldVal, pat.value))
+    of Binding:
+      # Add variable to list
+      variableDecls &= newVarStmt(pat.ident, newCall("default", newCall("typeof", fieldVal)))
+      unpackBranch &= newAssignment(pat.ident, fieldVal)
+
+  result = newStmtList(
+    # Check the branch is correct and all expected values are right
+    newLetStmt(rightBranch, newCall(ident"and", newCall(ident"==", getCurrentBranch(rhs), ident pattern.tag), branchCheck)),
+    # Define all the variables
+    variableDecls,
+    # Unpack the sumtype if on the right branch
+    nnkIfStmt.newTree(nnkElifBranch.newTree(rightBranch, unpackBranch)),
+    # Let user know if its alright
+    rightBranch
+  )
 
 proc getBranchEnum[T: CasedObject](c: typedesc[T], e: enum): enum =
   typeof(c).D.e
@@ -424,25 +529,63 @@ macro `case`*(n: CasedObject | CaseObject): untyped =
   result &= newLetStmt(valueIdent, n[0])
   result &= newLetStmt(currentBranchIdent, getCurrentBranch(valueIdent))
 
-  let caseStmt = nnkCaseStmt.newTree(currentBranchIdent)
+  var
+    branches = initTable[string, seq[tuple[pat: Pattern, patNode, body: NimNode]]]() # label -> branches
+    elseBranch = newEmptyNode()
+  # Each `of` branch gets converted into an if statement.
+  # We still have a case statement to jump to the kind, so not every if statement is ran.
+  # For simplicity we copy the `else` branch, should see if we could combine block/break to not dupe it
   for branch in n[1 .. ^1]:
     case branch.kind
     of nnkOfBranch:
-      let body = newStmtList(
-        newCall(bindSym"?=", branch[0], valueIdent),
-        branch[1]
-      )
-      # We need to bind the tag in the generated case or else we get collision problems
       let
-        userBranch = branch[0].parsePattern().tag
-        branchTag = newCall(bindSym"typeof", currentBranchIdent).newDotExpr(ident userBranch)
-      caseStmt &= nnkOfBranch.newTree(branchTag, body)
+        pattern = branch[0].parsePattern()
+        userBranch = pattern.tag
+      discard branches.hasKeyOrPut(userBranch, @[])
+      branches[userBranch] &= (pattern, branch[0], branch[1])
     of nnkElse:
-      caseStmt &= branch
+      elseBranch = branch
     else:
       "Unexpected node".error(branch)
+
+  # Now build up the case statement
+  let caseStmt = nnkCaseStmt.newTree(currentBranchIdent)
+  for tag, branches in branches:
+    var
+      checks = nnkIfStmt.newTree()
+      elseBranch = elseBranch # By default, we just copy the else branch
+    var hasFullMatch = false
+    for (pat, patNode, body) in branches:
+      if pat.fullBinding:
+        let unpacking = newStmtList(
+          newCall(bindSym"?=", patNode, valueIdent),
+          body
+        )
+        hasFullMatch = true
+        if checks.len == 0:
+          # First node, just unpack directly
+          checks = unpacking
+        else:
+          # We skip everything after this, so just add it as the else branch (helps with expressions)
+          checks &= nnkElse.newTree(unpacking)
+      elif hasFullMatch: # We are after a full match, don't even add the code
+        "Branch will never match, less precise pattern precedes this".warning(patNode)
+      else:
+        checks &= nnkElifBranch.newTree(
+          newCall(bindSym"?==", patNode, valueIdent),
+          body
+        )
+
+    if elseBranch.kind != nnkEmpty and not hasFullMatch:
+      checks &= elseBranch
+
+    caseStmt &= nnkOfBranch.newTree(
+      newCall(bindSym"typeof", currentBranchIdent).newDotExpr(ident tag),
+      checks
+    )
+  if elseBranch.kind != nnkEmpty:
+    caseStmt &= elseBranch
   result &= caseStmt
-  echo result.toStrLit
 
 # Extra modules to import so they are included in the docs
 import casserole/results

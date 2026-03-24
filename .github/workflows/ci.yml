@@ -45,6 +45,9 @@ jobs:
       - name: "Run Tests"
         run: nimble test
 
+      - name: "Install for docs"
+        run: nimble install
+
       - name: "Build documentation"
         uses: ire4ever1190/nim-docs-action@v2
         with:

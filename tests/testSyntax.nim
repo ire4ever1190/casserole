@@ -36,6 +36,20 @@ suite "Unpacking":
     Left(value) ?= someValue
     check value == "hello"
 
+  test "Can pattern match against value":
+    check Left("hello") ?== Maybe[string, string].Left("hello")
+
+  test "Can ignore a field":
+    Left(_) ?= someValue
+    check not declared(_)
+
+  test "Can directly check":
+    Left("hello") ?= someValue
+
+  test "FieldDefect raised if checks fail":
+    expect FieldDefect:
+      Left("notHello") ?= someValue
+
   test "Can unpack via branch":
     let default = if Left(value) ?== someValue: value
                   else: "Some default"
@@ -61,9 +75,25 @@ suite "Unpacking":
   test "Case statements can be exhaustive":
     # The test is if this compiles
     let value = case noValue
+                # Everything can be binded, so we've caught all the cases
                 of Left(value): value
+                of Right(1234): "Should never match"
                 of Right(value): "Nothing"
     check value == "Nothing"
+
+  test "Can compare values in case statements":
+    check case someValue
+          of Left("hello"): true
+          of Right(_): false
+          else: false
+
+  test "Can compare multiple values":
+    check case someValue
+          of Left("not hello"): false
+          of Left(_): true
+          of Left(_): true
+          of Right(_): false
+
 
   test "Can ignore values with `_`":
     let value = case noValue
@@ -75,7 +105,7 @@ suite "Unpacking":
     expect FieldDefect:
       Left(_) ?= Maybe[int, int].Right(1)
 
-suite "Shorthand syntax":
+suite "Shorthand construction syntax":
   test "Can use short hand syntax":
     let id = Node.Int(1)
     Int(num) ?= id
@@ -133,7 +163,7 @@ suite "Wrapping JsonNode":
 
 import ./auxOtherFile
 test "Can import another type":
-  check A(_) ?== SomeType.A(9)
+  check A(9) ?== SomeType.A(9)
 
 suite "Comparison":
   test "Same branch and values are equal":
