@@ -227,7 +227,7 @@ macro unrollEnum*(body: ForLoopStmt): untyped =
     "Expecting a single argument containing an enum".error(body[1])
   return newCall(bindSym"unrollEnumAux", body[1][1], newLit body[0].strVal, body[2])
 
-macro grabBranch(obj: CaseObject | CasedObject, branch: typed): enum =
+macro grabBranch(obj: typedesc[CaseObject | CasedObject] | CaseObject | CasedObject, branch: typed): enum =
   ## Helper macro to get around typing issues.
   ## If there is an enum branch with same name as the type, then the object is choosen which causes type errors.
   ## We get around this by looking up the type and returning a sym for the exact enum value
