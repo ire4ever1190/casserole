@@ -1,6 +1,6 @@
 # Package
 
-version       = "0.3.0"
+version       = "0.3.1"
 author        = "Jake Leahy"
 description   = "Case objects in Nim. Loosely based on the RFC"
 license       = "MIT"
